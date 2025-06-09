@@ -13,11 +13,34 @@ from bokeh.io import output_notebook
 import sys
 import importlib
 from wsi_mif_registration.config import VisualizationParams
-
+from skimage import color
 
 def setup_bokeh_notebook():
     """Setup Bokeh for notebook output"""
     output_notebook()
+def visualize_overlays(fixed_tile, moving_tile, transformed_tile):
+    overlay_before = np.dstack((
+        color.rgb2gray(moving_tile),
+        color.rgb2gray(fixed_tile),
+        color.rgb2gray(moving_tile)
+    ))
+    overlay_after = np.dstack((
+        color.rgb2gray(transformed_tile),
+        color.rgb2gray(fixed_tile),
+        color.rgb2gray(transformed_tile)
+    ))
+    
+    _, axs = plt.subplots(1, 2, figsize=(15, 10))
+    
+    axs[0].imshow(overlay_before, cmap="gray")
+    axs[0].set_title("Overlay Before")
+    axs[0].axis('off')
+    
+    axs[1].imshow(overlay_after, cmap="gray")
+    axs[1].set_title("Overlay After")
+    axs[1].axis('off')
+    
+    plt.show()
 
 
 def visualize_patches(fixed_tile, moving_tile, transformed_tile):
