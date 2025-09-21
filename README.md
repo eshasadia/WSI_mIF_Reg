@@ -103,7 +103,3 @@ plot = create_nuclei_overlay_plot(moving_df, fixed_df)
 - `FIXED_THRESHOLD`: Binary threshold for fixed image nuclei (default: 170)
 - `MOVING_THRESHOLD`: Binary threshold for moving image nuclei (default: 180)
 - `MIN_NUCLEI_AREA`: Minimum area for nuclei detection (default: 200)
-
-## Output Files
-
-- `comet_nuclei_coordinates_he_7577.csv`: Fixed im
