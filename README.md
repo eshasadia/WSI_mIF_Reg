@@ -23,7 +23,7 @@ wsi_registration/
 - **Multi-resolution WSI processing** using TIA Toolbox
 - **Rigid registration** using traditional image registration techniques
 - **Non-rigid registration** using Coherent Point Drift (CPD)
-- **ICP registration** for point cloud alignment
+- **Shape-aware Rigid registration** for point cloud alignment
 - **Nuclei detection** in tissue patches
 - **Interactive visualization** using Bokeh
 - **Comprehensive evaluation** with Target Registration Error (TRE) metrics
@@ -84,7 +84,7 @@ plot = create_nuclei_overlay_plot(moving_df, fixed_df)
 3. **Rigid Registration**: Perform initial coarse alignment
 4. **Patch Extraction**: Extract patches for detailed analysis
 5. **Nuclei Detection**: Detect nuclei in tissue patches
-6. **ICP Registration**: Refine alignment using detected nuclei
+6. **Shape aware Registration**: Refine alignment using detected nuclei
 7. **Non-rigid Registration**: Apply CPD for local deformation
 8. **Displacement Field**: Generate smooth transformation field
 9. **Evaluation**: Calculate TRE metrics on landmark points
