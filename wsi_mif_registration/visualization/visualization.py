@@ -18,6 +18,89 @@ from skimage import color
 def setup_bokeh_notebook():
     """Setup Bokeh for notebook output"""
     output_notebook()
+
+def visualize_cluster_alignment(
+    fixed_points,
+    moving_points,
+    moving_updated,
+    fixed_df=None,
+    moving_df=None,
+    figsize=(10, 10),
+    title='Cluster Centers: Fixed, Original Moving, and Transformed',
+    save_path=None
+):
+    """
+    Visualize and optionally save the alignment between fixed, moving, and transformed cluster centers.
+
+    Parameters
+    ----------
+    fixed_points : np.ndarray
+        Array of fixed cluster centers with shape (N, 2).
+    moving_points : np.ndarray
+        Array of original moving cluster centers with shape (N, 2).
+    moving_updated : np.ndarray
+        Array of transformed (aligned) moving cluster centers with shape (N, 2).
+    fixed_df : pandas.DataFrame, optional
+        DataFrame to update with fixed point coordinates.
+    moving_df : pandas.DataFrame, optional
+        DataFrame to update with moving point coordinates.
+    figsize : tuple, default=(10, 10)
+        Figure size for the plot.
+    title : str, optional
+        Title for the plot.
+    save_path : str, optional
+        Path to save the plot (e.g., "results/alignment_plot.png"). If None, the plot is just shown.
+
+    Returns
+    -------
+    fixed_df, moving_df : pandas.DataFrame or None
+        Updated DataFrames if provided, else None.
+    """
+
+    # Optionally update dataframes
+    if fixed_df is not None:
+        fixed_df[['global_x', 'global_y']] = fixed_points
+    if moving_df is not None:
+        moving_df[['global_x', 'global_y']] = moving_updated
+
+    # Create the plot
+    plt.figure(figsize=figsize)
+
+    # Fixed cluster centers (red)
+    plt.scatter(
+        fixed_points[:, 0], fixed_points[:, 1],
+        c='red', s=20, alpha=0.6, label='Fixed cluster centers'
+    )
+
+    # Original moving cluster centers (blue)
+    plt.scatter(
+        moving_points[:, 0], moving_points[:, 1],
+        c='blue', s=30, alpha=0.6, label='Original moving cluster centers'
+    )
+
+    # Transformed moving cluster centers (cyan)
+    plt.scatter(
+        moving_updated[:, 0], moving_updated[:, 1],
+        c='cyan', s=10, alpha=0.6, label='Transformed cluster centers'
+    )
+
+    # Plot formatting
+    plt.legend()
+    plt.title(title)
+    plt.xlabel('X coordinate (normalized)')
+    plt.ylabel('Y coordinate (normalized)')
+    plt.axis('equal')
+    plt.gca().invert_yaxis()
+
+    # Save or display
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        print(f"Plot saved to {save_path}")
+    else:
+        plt.show()
+
+    return fixed_df, moving_df
 def visualize_overlays(fixed_tile, moving_tile, transformed_tile):
     overlay_before = np.dstack((
         color.rgb2gray(moving_tile),

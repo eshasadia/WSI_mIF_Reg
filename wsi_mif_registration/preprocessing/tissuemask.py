@@ -14,11 +14,9 @@ from vision_agent.tools import florence2_sam2_instance_segmentation
 from tiatoolbox.models.engine.semantic_segmentor import SemanticSegmentor
 from tiatoolbox.models.architecture.unet import UNetModel
 from pillow_heif import register_heif_opener
+import wsi_mif_registration.preprocessing.stainnorm as stainnorm
 register_heif_opener()
 
-
-# Assume this function is already defined somewhere
-# from your_segmentation_library import florence2_sam2_instance_segmentation
 
 
 class FlorenceTissueMaskExtractor:
@@ -27,7 +25,7 @@ class FlorenceTissueMaskExtractor:
         self.default_prompt = "tissue,stain"
         self.backup_prompts = ["tissue,stain", "tissue", "cell,tissue", "histology"]
 
-    def extract(self, image: np.ndarray) -> np.ndarray:
+    def extract(self, image: np.ndarray, artefacts: bool) -> np.ndarray:
         """
         Extracts the tissue mask from an image using instance segmentation or fallback methods.
 
@@ -45,16 +43,23 @@ class FlorenceTissueMaskExtractor:
                 segments = self._segment_with_prompts(image, prompt)
                 if segments:
                     break
+                else:
+                    stain=stainnorm.StainNormalizer()
+                    norm, h, e=stain.process(image)
+                    segments=self._segment_with_prompts(norm, prompt)
+        if artefacts:
+            if segments:
+                # return [(segment['mask'] * 255).astype(np.uint8) for segment in segments]
+                return (segments[0]['mask'] * 255).astype(np.uint8)
         # Combine all segment masks into a single image (maximum value)
-        if segments:
-            combined_mask = np.zeros_like(segments[0]['mask'], dtype=np.uint8)
-            for segment in segments:
-                combined_mask = np.maximum(combined_mask, (segment['mask'] * 255).astype(np.uint8))
-            
-            return combined_mask
-        # if segments:
-        #     # return [(segment['mask'] * 255).astype(np.uint8) for segment in segments]
-        #     return (segments[0]['mask'] * 255).astype(np.uint8)
+        else:
+            if segments:
+                combined_mask = np.zeros_like(segments[0]['mask'], dtype=np.uint8)
+                for segment in segments:
+                    combined_mask = np.maximum(combined_mask, (segment['mask'] * 255).astype(np.uint8))
+                
+                return combined_mask
+      
 
         # Fallback to grayscale + Otsu's method
         return self._fallback_mask(image)

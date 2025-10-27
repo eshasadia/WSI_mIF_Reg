@@ -11,6 +11,9 @@ from tiatoolbox.tools.registration.wsi_registration import AffineWSITransformer
 from skimage.registration import phase_cross_correlation
 from accelerated_features.modules.xfeat import XFeat
 import wsi_mif_registration.utils.util as util
+import cv2
+import numpy as np
+
 # Constants
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
@@ -263,6 +266,44 @@ cv2.waitKey(0)
 cv2.destroyAllWindows()
 
 """
+
+
+
+
+def brisk_registration(moving_img, fixed_img, verbose=False):
+    """
+    Performs rigid registration using BRISK feature matching.
+    """
+    fixed_gray = cv2.cvtColor(fixed_img, cv2.COLOR_BGR2GRAY) if fixed_img.ndim == 3 else fixed_img
+    moving_gray = cv2.cvtColor(moving_img, cv2.COLOR_BGR2GRAY) if moving_img.ndim == 3 else moving_img
+
+    brisk = cv2.BRISK_create()
+    kp1, des1 = brisk.detectAndCompute(fixed_gray, None)
+    kp2, des2 = brisk.detectAndCompute(moving_gray, None)
+
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda x: x.distance)
+
+    if len(matches) < 4:
+        raise ValueError("Not enough matches.")
+
+    src_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+    dst_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+
+    transform_matrix, mask = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.RANSAC)
+    if transform_matrix is None:
+        raise RuntimeError("Failed to compute transform.")
+
+    transform_matrix_h = np.vstack([transform_matrix, [0, 0, 1]])
+    aligned_img = cv2.warpAffine(moving_img, transform_matrix, (fixed_img.shape[1], fixed_img.shape[0]))
+
+    match_info = {
+        "num_matches": len(matches),
+        "inliers": int(np.sum(mask)) if mask is not None else 0
+    }
+
+    return aligned_img, transform_matrix_h, match_info
 
 
 def rigid_registration( moving_img, fixed_img,moving_mask, fixed_mask, verbose=False):
@@ -544,3 +585,321 @@ def extract_corresponding_tiles(source_wsi, target_wsi, source_mask=None, target
         'transformed_tile': transformed_tile,
         'transform_40x': transform_40x,
     }
+
+
+def rigid_registration(moving_img, fixed_img, moving_mask, fixed_mask, verbose=False):
+    """
+    Aligns a moving image to a fixed image using Trimorph, XFeatReg, and BRISK.
+    
+    Args:
+        fixed_img (np.ndarray): Fixed image.
+        moving_img (np.ndarray): Moving image.
+        fixed_mask (np.ndarray): Fixed mask.
+        moving_mask (np.ndarray): Moving mask.
+        verbose (bool): If True, print intermediate steps.
+        
+    Returns:
+        moving_img_transformed (np.ndarray): Final aligned moving image.
+        final_transform (np.ndarray): Final transformation matrix (3x3).
+        timing (dict): Dictionary with timing info.
+        ngf_metrics (dict): Dictionary with NGF metrics for all methods.
+    """
+    import time
+    timing = {}
+    ngf_metrics = {}
+    
+    # Initial registration with Trimorph
+    start_time = time.time()
+    aligner = Trimorph()
+    best_transform1, moving_img_transformed, moving_mask_transformed, max_dice = aligner.prealignment(
+        fixed_img, moving_img, fixed_mask, moving_mask
+    )
+    timing['trimorph'] = time.time() - start_time
+    
+    # Evaluate NGF metric for Trimorph
+    ngf_initial = ngf_metric(fixed_img, moving_img_transformed)
+    ngf_metrics['NGF_trimorph'] = ngf_initial
+    
+    if verbose:
+        print(f"Trimorph NGF: {ngf_initial:.4f}")
+    
+    # Initialize variables for best result tracking
+    best_ngf = ngf_initial
+    best_transform = best_transform1
+    best_image = moving_img_transformed
+    best_method = 'Trimorph'
+    
+    # BRISK Registration
+    start_time = time.time()
+    try:
+        brisk_transform, brisk_aligned = brisk_registration(fixed_img, moving_img, verbose=verbose)
+        timing['brisk'] = time.time() - start_time
+        
+        if brisk_aligned is not None:
+            ngf_brisk = ngf_metric(fixed_img, brisk_aligned)
+            ngf_metrics['NGF_brisk'] = ngf_brisk
+            
+            if verbose:
+                print(f"BRISK NGF: {ngf_brisk:.4f}")
+            
+            # Update best result if BRISK is better
+            if ngf_brisk > best_ngf:
+                best_ngf = ngf_brisk
+                best_transform = brisk_transform
+                best_image = brisk_aligned
+                best_method = 'BRISK'
+        else:
+            ngf_metrics['NGF_brisk'] = 0.0
+            if verbose:
+                print("BRISK registration failed")
+    except Exception as e:
+        timing['brisk'] = time.time() - start_time
+        ngf_metrics['NGF_brisk'] = 0.0
+        if verbose:
+            print(f"BRISK registration error: {e}")
+    
+    # XFeatReg Registration - only if Trimorph failed (identity transform)
+    if np.array_equal(best_transform1, np.eye(3)):
+        if verbose:
+            print("Running extra registration with XFeatReg...")
+        
+        start_time = time.time()
+        aligner = XFeatReg()
+        xfeat_transform, xfeat_aligned = aligner.register(fixed_img, moving_img)
+        xfeat_transform = np.vstack((xfeat_transform, [0, 0, 1]))
+        timing['xfeat_fallback'] = time.time() - start_time
+        
+        ngf_xfeat = ngf_metric(fixed_img, xfeat_aligned)
+        ngf_metrics['NGF_xfeat_fallback'] = ngf_xfeat
+        
+        if verbose:
+            print(f"XFeat (fallback) NGF: {ngf_xfeat:.4f}")
+        
+        # Update best result if XFeat is better
+        if ngf_xfeat > best_ngf:
+            best_ngf = ngf_xfeat
+            best_transform = xfeat_transform
+            best_image = xfeat_aligned
+            best_method = 'XFeat_fallback'
+    
+    else:
+        # Optional second registration with XFeatReg (as in original code)
+        start_time = time.time()
+        aligner = XFeatReg()
+        
+        # Register using already transformed image
+        M1, aligned_image = aligner.register(fixed_img, moving_img_transformed)
+        ngf_second = ngf_metric(fixed_img, aligned_image)
+        ngf_metrics['NGF_xfeat_transformed'] = ngf_second
+        
+        # Register directly from original moving image
+        M2, third_aligned_image = aligner.register(fixed_img, moving_img)
+        ngf_third = ngf_metric(fixed_img, third_aligned_image)
+        ngf_metrics['NGF_xfeat_direct'] = ngf_third
+        
+        timing['xfeat_refinement'] = time.time() - start_time
+        
+        # Ensure M1 and M2 are 3x3 transformation matrices
+        M1_hom = np.vstack([M1, [0, 0, 1]]) if M1.shape == (2, 3) else M1
+        M2_hom = np.vstack([M2, [0, 0, 1]]) if M2.shape == (2, 3) else M2
+        
+        if verbose:
+            print(f"XFeat (transformed) NGF: {ngf_second:.4f}")
+            print(f"XFeat (direct) NGF: {ngf_third:.4f}")
+        
+        # Check if XFeat refinements are better
+        if ngf_second > best_ngf:
+            best_ngf = ngf_second
+            best_transform = best_transform1 @ M1_hom
+            best_image = aligned_image
+            best_method = 'Trimorph+XFeat_transformed'
+        
+        if ngf_third > best_ngf:
+            best_ngf = ngf_third
+            best_transform = M2_hom
+            best_image = third_aligned_image
+            best_method = 'XFeat_direct'
+    
+    if verbose:
+        print(f"Best method: {best_method} with NGF: {best_ngf:.4f}")
+    
+    # Store the best method used
+    ngf_metrics['best_method'] = best_method
+    ngf_metrics['best_ngf'] = best_ngf
+    
+    return best_image, best_transform, ngf_metrics
+
+
+def brisk_registration(fixed_img, moving_img, max_features=1000, match_threshold=0.75, 
+                      min_matches=10, verbose=False):
+    """
+    Perform rigid registration using BRISK feature matching.
+    
+    Args:
+        fixed_img (np.ndarray): Fixed (reference) image
+        moving_img (np.ndarray): Moving image to be aligned
+        max_features (int): Maximum number of features to detect
+        match_threshold (float): Threshold for feature matching (0-1)
+        min_matches (int): Minimum number of matches required
+        verbose (bool): Print debug information
+        
+    Returns:
+        transform_matrix (np.ndarray): 3x3 homogeneous transformation matrix
+        aligned_image (np.ndarray): Transformed moving image
+    """
+    
+    # Convert to grayscale if needed
+    if len(fixed_img.shape) == 3:
+        fixed_gray = cv2.cvtColor(fixed_img, cv2.COLOR_RGB2GRAY)
+    else:
+        fixed_gray = fixed_img.astype(np.uint8)
+        
+    if len(moving_img.shape) == 3:
+        moving_gray = cv2.cvtColor(moving_img, cv2.COLOR_RGB2GRAY)
+    else:
+        moving_gray = moving_img.astype(np.uint8)
+    
+    # Initialize BRISK detector
+    brisk = cv2.BRISK_create(thresh=30, octaves=3, patternScale=1.0)
+    
+    # Detect keypoints and compute descriptors
+    kp1, des1 = brisk.detectAndCompute(fixed_gray, None)
+    kp2, des2 = brisk.detectAndCompute(moving_gray, None)
+    
+    if des1 is None or des2 is None:
+        if verbose:
+            print("BRISK: No descriptors found in one or both images")
+        return np.eye(3), None
+    
+    if verbose:
+        print(f"BRISK: Found {len(kp1)} keypoints in fixed image, {len(kp2)} in moving image")
+    
+    # Match descriptors using BFMatcher
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des1, des2)
+    
+    # Sort matches by distance (best matches first)
+    matches = sorted(matches, key=lambda x: x.distance)
+    
+    if len(matches) < min_matches:
+        if verbose:
+            print(f"BRISK: Insufficient matches ({len(matches)} < {min_matches})")
+        return np.eye(3), None
+    
+    # Filter matches based on distance threshold
+    good_matches = []
+    if len(matches) > 0:
+        max_dist = max([m.distance for m in matches])
+        dist_threshold = match_threshold * max_dist
+        good_matches = [m for m in matches if m.distance <= dist_threshold]
+    
+    if len(good_matches) < min_matches:
+        if verbose:
+            print(f"BRISK: Insufficient good matches ({len(good_matches)} < {min_matches})")
+        return np.eye(3), None
+    
+    if verbose:
+        print(f"BRISK: Using {len(good_matches)} good matches out of {len(matches)} total")
+    
+    # Extract matched points
+    src_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+    dst_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+    
+    # Estimate transformation using RANSAC
+    try:
+        # For rigid registration, we can use estimateAffinePartial2D or estimateAffine2D
+        # estimateAffinePartial2D constrains to similarity transform (rotation + translation + uniform scale)
+        transform_2x3, inliers = cv2.estimateAffinePartial2D(
+            src_pts, dst_pts, 
+            method=cv2.RANSAC,
+            ransacReprojThreshold=3.0,
+            maxIters=2000,
+            confidence=0.99
+        )
+        
+        if transform_2x3 is None:
+            if verbose:
+                print("BRISK: Failed to estimate transformation")
+            return np.eye(3), None
+        
+        # Convert to 3x3 homogeneous matrix
+        transform_matrix = np.vstack([transform_2x3, [0, 0, 1]])
+        
+        # Apply transformation
+        h, w = moving_img.shape[:2]
+        if len(moving_img.shape) == 3:
+            aligned_image = cv2.warpAffine(moving_img, transform_2x3, (w, h), 
+                                         flags=cv2.INTER_LINEAR, 
+                                         borderMode=cv2.BORDER_CONSTANT, 
+                                         borderValue=0)
+        else:
+            aligned_image = cv2.warpAffine(moving_img, transform_2x3, (w, h), 
+                                         flags=cv2.INTER_LINEAR, 
+                                         borderMode=cv2.BORDER_CONSTANT, 
+                                         borderValue=0)
+        
+        if verbose:
+            inlier_count = np.sum(inliers) if inliers is not None else 0
+            print(f"BRISK: Transformation estimated with {inlier_count} inliers")
+        
+        return transform_matrix, aligned_image
+        
+    except Exception as e:
+        if verbose:
+            print(f"BRISK: Error in transformation estimation: {e}")
+        return np.eye(3), None
+
+
+def visualize_brisk_matches(fixed_img, moving_img, max_features=1000, match_threshold=0.75):
+    """
+    Visualize BRISK feature matches between two images.
+    
+    Args:
+        fixed_img (np.ndarray): Fixed image
+        moving_img (np.ndarray): Moving image
+        max_features (int): Maximum features to detect
+        match_threshold (float): Matching threshold
+        
+    Returns:
+        match_img (np.ndarray): Image showing the matches
+    """
+    # Convert to grayscale if needed
+    if len(fixed_img.shape) == 3:
+        fixed_gray = cv2.cvtColor(fixed_img, cv2.COLOR_RGB2GRAY)
+    else:
+        fixed_gray = fixed_img.astype(np.uint8)
+        
+    if len(moving_img.shape) == 3:
+        moving_gray = cv2.cvtColor(moving_img, cv2.COLOR_RGB2GRAY)
+    else:
+        moving_gray = moving_img.astype(np.uint8)
+    
+    # Initialize BRISK
+    brisk = cv2.BRISK_create(thresh=30, octaves=3, patternScale=1.0)
+    
+    # Find keypoints and descriptors
+    kp1, des1 = brisk.detectAndCompute(fixed_gray, None)
+    kp2, des2 = brisk.detectAndCompute(moving_gray, None)
+    
+    if des1 is None or des2 is None:
+        return None
+    
+    # Match descriptors
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda x: x.distance)
+    
+    # Filter good matches
+    if len(matches) > 0:
+        max_dist = max([m.distance for m in matches])
+        dist_threshold = match_threshold * max_dist
+        good_matches = [m for m in matches if m.distance <= dist_threshold]
+    else:
+        good_matches = []
+    
+    # Draw matches
+    match_img = cv2.drawMatches(fixed_gray, kp1, moving_gray, kp2, 
+                               good_matches[:50], None, 
+                               flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+    
+    return match_img

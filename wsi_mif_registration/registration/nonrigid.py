@@ -1,28 +1,28 @@
 import torch as t
 import torch.nn.functional as tfun
 import torchvision.transforms as trans
-from typing import Callable, Optional, Tuple, List, Union, Dict, Any
 import torch.optim as topt
+import torch as tc
+import torch.nn.functional as F
+from typing import Optional, Tuple, List, Union, Dict, Any
+
 import numpy as np
 import math
 import cv2
+ 
+
 from skimage import color
-import SimpleITK as sitk
-import PIL
-import os
 from pathlib import Path
-from tqdm.auto import tqdm  # Added progress bar support
-import logging  # Added logging support
-import matplotlib.pyplot as plt
-from datetime import datetime
-import torch.nn.functional as F
-import torch as tc
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("elastic_registration")
+from tqdm.auto import tqdm  
+
+
+
+
+
+def initialize_deformation_field(input_tensor: t.Tensor) -> t.Tensor:
+ 
+    dim_count = len(input_tensor.size()) - 2
+    return t.zeros((input_tensor.size(0), input_tensor.size(2), input_tensor.size(3)) + (dim_count,)).type_as(input_tensor)
 
 
 def build_reference_coordinate_system(input_tensor: Optional[t.Tensor] = None,
@@ -47,7 +47,7 @@ def build_reference_coordinate_system(input_tensor: Optional[t.Tensor] = None,
     return coordinate_grid
 
 
-def smooth_with_gaussian_kernel(input_tensor: t.Tensor, blur_sigma: float) -> t.Tensor:
+def gaussian_smoothing(input_tensor: t.Tensor, blur_sigma: float) -> t.Tensor:
 
     with t.set_grad_enabled(False):
         kernel_width = int(blur_sigma * 2.54) + 1 
@@ -56,7 +56,7 @@ def smooth_with_gaussian_kernel(input_tensor: t.Tensor, blur_sigma: float) -> t.
         return trans.GaussianBlur(kernel_width, blur_sigma)(input_tensor)
 
 
-def calculate_smoothness_penalty(vector_field: t.Tensor, 
+def deformation_loss(vector_field: t.Tensor, 
                                compute_device: t.device = t.device("cuda"),
                                weight_map: Optional[t.Tensor] = None) -> t.Tensor:
     dim_count = len(vector_field.size()) - 2
@@ -80,10 +80,7 @@ def calculate_smoothness_penalty(vector_field: t.Tensor,
     return smoothness_term
 
 
-def initialize_zero_vector_field(input_tensor: t.Tensor) -> t.Tensor:
- 
-    dim_count = len(input_tensor.size()) - 2
-    return t.zeros((input_tensor.size(0), input_tensor.size(2), input_tensor.size(3)) + (dim_count,)).type_as(input_tensor)
+
 
 
 def scale_tensor_to_dimensions(input_tensor: t.Tensor, 
@@ -94,6 +91,42 @@ def scale_tensor_to_dimensions(input_tensor: t.Tensor,
                           mode=interpolation_method, align_corners=False)
 
 
+def compute_normalized_gradient_field(sources: t.Tensor, 
+                                      targets: t.Tensor, 
+                                      device: Optional[Union[str, t.device]] = None, 
+                                      eps: float = 1e-5) -> t.Tensor:
+    ndim = len(sources.size()) - 2
+    if ndim not in [2, 3]:
+        raise ValueError("Unsupported number of dimensions.")
+
+    def gradient(tensor):
+        gradients = []
+        for d in range(ndim):
+            pad_shape = [(0, 0)] * (2 + ndim)
+            pad_shape[2 + d] = (0, 1)
+            pad = [p for sub in reversed(pad_shape) for p in sub]
+            padded = F.pad(tensor, pad, mode='replicate')
+            grad = padded[..., 1:] - padded[..., :-1]
+            gradients.append(grad[..., :-1])  # match original shape
+        return gradients
+
+    # Compute gradients
+    grad_source = gradient(sources)
+    grad_target = gradient(targets)
+
+    # Normalize gradients
+    norm_source = t.sqrt(sum(g**2 for g in grad_source) + eps)
+    norm_target = t.sqrt(sum(g**2 for g in grad_target) + eps)
+    normed_source = [g / norm_source for g in grad_source]
+    normed_target = [g / norm_target for g in grad_target]
+
+    # Compute dot product of normalized gradients
+    dot_products = sum(gs * gt for gs, gt in zip(normed_source, normed_target))
+    
+    # NGF loss
+    ngf_loss = 1 - dot_products
+    return tc.mean(ngf_loss)
+
 
 def compute_normalized_cross_correlation(sources: t.Tensor, 
                                       targets: t.Tensor, 
@@ -103,17 +136,15 @@ def compute_normalized_cross_correlation(sources: t.Tensor,
     if ndim not in [2, 3]:
         raise ValueError("Unsupported number of dimensions.")
     try:
-        win_size =7
+        size =7
     except:
-        win_size = 3
+        size = 3
    
-    window = (win_size, ) * ndim
+    window = (size, ) * ndim
     if device is None:
         sum_filt = tc.ones([1, 1, *window]).type_as(sources)
     else:
         sum_filt = tc.ones([1, 1, *window], device=device)
-
-
 
     pad_no = math.floor(window[0] / 2)
     stride = ndim * (1,)
@@ -201,7 +232,7 @@ def create_multiscale_representation(input_tensor: t.Tensor,
             spatial_dims = t.Size(current_dims)[2:]
             
             # Apply smoothing to prevent aliasing, then downsample
-            smoothed = smooth_with_gaussian_kernel(pyramid_levels[i+1], 1)
+            smoothed = gaussian_smoothing(pyramid_levels[i+1], 1)
             downsampled = scale_tensor_to_dimensions(smoothed, spatial_dims, 
                                                  interpolation_method)
             
@@ -267,308 +298,227 @@ def prepare_image_tensors(source_image: np.ndarray,
     return source_tensor, target_tensor
 
 
-def transform_matrix_to_deformation_field(transform_matrix: t.Tensor, 
-                                        output_dimensions: t.Size) -> t.Tensor:
-  
-    # Generate deformation field from matrix
-    deformation_grid = tfun.affine_grid(transform_matrix, 
-                                      size=output_dimensions, 
-                                      align_corners=False)
-    
-    # Create identity grid to compute displacement
-    grid_dimensions = (deformation_grid.size(0), 1) + deformation_grid.size()[1:-1]
-    identity_grid = build_reference_coordinate_system(
-        dimensions=grid_dimensions, 
-        compute_device=transform_matrix.device
-    )
-    
-    # Displacement is the difference from identity
-    displacement_vectors = deformation_grid - identity_grid
-    
-    return displacement_vectors
 
 
+def demons_registration(
+    source: np.ndarray,
+    target: np.ndarray,
+    num_iterations: int = 300,
+    smoothing_sigma: float = 1.5,
+    similarity: str = "mse",  # or "ncc"
+    compute_device: Union[str, t.device] = "cuda",
+    verbose: bool = True
+) -> Tuple[t.Tensor, t.Tensor]:
+    """
+    Diffeomorphic Demons-inspired nonrigid image registration.
+
+    Args:
+        source: Moving image (numpy array).
+        target: Fixed image (numpy array).
+        num_iterations: Number of demons iterations.
+        smoothing_sigma: Gaussian smoothing parameter for the update field.
+        similarity: Similarity metric to use ("mse" or "ncc").
+        compute_device: CUDA or CPU.
+        verbose: Whether to print progress.
+
+    Returns:
+        Final deformation field and warped image (torch tensors).
+    """
+    device = t.device(compute_device)
+
+    # Convert and normalize
+    source_tensor, target_tensor = prepare_image_tensors(source, target, device)
+
+    # Initialize coordinate grid
+    coord_grid = build_reference_coordinate_system(source_tensor, compute_device=device)
+
+    # Initialize deformation field
+    deformation_field = t.zeros_like(coord_grid, requires_grad=False)
 
 
+    for i in tqdm(range(num_iterations), disable=not verbose, desc="Demons iterations"):
+        # Warp image using current deformation field
+        warped = apply_deformation_field(source_tensor, deformation_field, coord_grid, compute_device=device)
 
-def tv_regularizer(vector_field: t.Tensor,
-                           compute_device: t.device = t.device("cuda"),
-                           **config_params) -> t.Tensor:
-    """Total Variation regularizer."""
-    isotropic = config_params.get('isotropic', False)
-    
-    dim_count = len(vector_field.size()) - 2
-    
-    if dim_count == 2:
-        dx = vector_field[:, 1:, :, :] - vector_field[:, :-1, :, :]
-        dy = vector_field[:, :, 1:, :] - vector_field[:, :, :-1, :]
-        
-        if isotropic:
-            # Isotropic TV: L2 norm over displacement components, L1 over spatial
-            grad_magnitude = t.sqrt(t.sum(dx**2, dim=-1) + t.sum(dy**2, dim=-1) + 1e-8)
-            tv_loss = t.mean(grad_magnitude)
-        else:
-            # Anisotropic TV: L1 norm everywhere
-            tv_loss = t.mean(t.abs(dx)) + t.mean(t.abs(dy))
-    else:
-        raise ValueError("3D TV not implemented yet")
-    
-    return tv_loss
+        diff = (target_tensor - warped).squeeze(1)  # [1, H, W]
+        diff = diff.unsqueeze(-1)  # [1, H, W, 1]
+
+        grad_warped = t.gradient(warped[0, 0], spacing=(1.0, 1.0), edge_order=1)
+        grad_warped = t.stack(grad_warped, dim=-1).unsqueeze(0).to(device)  # [1, H, W, 2]
+
+        denominator = grad_warped.pow(2).sum(dim=-1, keepdim=True) + diff.pow(2) + 1e-5
+        demons_update = diff * grad_warped / denominator  # [1, H, W, 2]
 
 
+        denominator = grad_warped.pow(2).sum(dim=-1, keepdim=True) + diff.pow(2) + 1e-5
+        demons_update = diff.unsqueeze(-1) * grad_warped / denominator
 
+        # Smooth the update field
+        demons_update = gaussian_smoothing(demons_update.permute(0, 3, 1, 2), smoothing_sigma)
+        demons_update = demons_update.permute(0, 2, 3, 1)
 
+        # Compose deformation (diffeomorphic accumulation)
+        deformation_field = deformation_field + demons_update.detach()
 
-def diffusion_adaptive_tc(displacement_field: tc.Tensor, compute_device: str = "cuda", **params):
-    """Adaptive diffusion regularization."""
-    lambda_0 = params.get('lambda_0', 1.0)
-    edge_threshold = params.get('edge_threshold', 0.1)
-    
-    ndim = len(displacement_field.size()) - 2
-    
-    if ndim == 2:
-        # Compute gradients
-        dx = displacement_field[:, 1:, :, :] - displacement_field[:, :-1, :, :]  # [B, H-1, W, 2]
-        dy = displacement_field[:, :, 1:, :] - displacement_field[:, :, :-1, :]  # [B, H, W-1, 2]
-        
-        # Compute gradient magnitudes for each component separately
-        grad_mag_x = tc.sqrt(tc.sum(dx**2, dim=-1) + 1e-8)  # [B, H-1, W]
-        grad_mag_y = tc.sqrt(tc.sum(dy**2, dim=-1) + 1e-8)  # [B, H, W-1]
-        
-        # Compute adaptive weights
-        weights_x = lambda_0 * tc.exp(-(grad_mag_x**2) / (edge_threshold**2))  # [B, H-1, W]
-        weights_y = lambda_0 * tc.exp(-(grad_mag_y**2) / (edge_threshold**2))  # [B, H, W-1]
-        
-        # Apply weights to squared gradients (sum over displacement components)
-        weighted_dx = weights_x * tc.sum(dx**2, dim=-1)  # [B, H-1, W]
-        weighted_dy = weights_y * tc.sum(dy**2, dim=-1)  # [B, H, W-1]
-        
-        # Compute final regularization term
-        diffusion_reg = (tc.mean(weighted_dx) + tc.mean(weighted_dy)) / 2
-        
-    return diffusion_reg
+        # Optionally clip or regularize deformation field to prevent instability
+
+ 
+            
+
+    final_warped = apply_deformation_field(source_tensor, deformation_field, coord_grid, compute_device=device)
+
+    return deformation_field, final_warped
 
 
 
 def elastic_image_registration(
-    moving_img: np.ndarray, 
-    fixed_img: np.ndarray, 
-    similarity_metric: str = "ncc",  # Added option to select similarity metric
-    similarity_metric_params: Dict[str, Any] = {}, 
-    deformation_regularization_params: Dict[str, Any] = {},
-    constraint_function: Optional[Callable] = None, 
-    constraint_params: Dict[str, Any] = {},
-    starting_deformation: Optional[t.Tensor] = None,
-    compute_device: Union[str, t.device] = "cuda", 
+    source: np.ndarray, 
+    target: np.ndarray, 
+    similarity_metric: str = "ncc",
+    similarity_metric_params: Dict[str, Any] = {"size": 5},
+    compute_device: Union[str, t.device] = "cuda",
     verbose: bool = False,
     output_dir: Optional[Union[str, Path]] = None,
     save_intermediate: bool = False
 ) -> Tuple[t.Tensor, t.Tensor]:
-    """
-    Performs  elastic image registration.
-    
-    Args:
-        
-    Returns:
-        Tuple of (final_deformation_field, warped_source_image)
-    """
-    # Convert string device specification to torch.device
-    if isinstance(compute_device, str):
-        compute_device = t.device(compute_device)
-        
-    logger.info(f"Using device: {compute_device}")
-    
-    # Store original images
-    original_moving, original_fixed = moving_img, fixed_img
-    
-    # Prepare tensors for registration
-    original_moving_tensor, original_fixed_tensor = prepare_image_tensors(
-        original_moving, original_fixed, compute_device
-    )
-    
-    # Apply pre-alignment to ensure images have same dimensions
-    aligned_moving = cv2.warpAffine(
-        moving_img, 
-        np.eye(2, 3), 
-        (fixed_img.shape[1], fixed_img.shape[0]),
-        borderMode=cv2.BORDER_REFLECT
-    )
-    
-    # Convert to tensors for registration
-    moving_tensor, fixed_tensor = prepare_image_tensors(aligned_moving, fixed_img, compute_device)
-    
-    logger.info(f"Moving image tensor size: {moving_tensor.size()}")
-    pyramid_levels=7
-    # Create multi-resolution pyramids
-    logger.info(f"Creating {pyramid_levels}-level image pyramids")
-    moving_pyramid = create_multiscale_representation(moving_tensor, level_count=pyramid_levels)
-    fixed_pyramid = create_multiscale_representation(fixed_tensor, level_count=pyramid_levels)
-    
-    # Create output directory if needed
-    if save_intermediate and output_dir is not None:
-        if isinstance(output_dir, str):
-            output_dir = Path(output_dir)
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Choose similarity metric function
-    if similarity_metric.lower() == "ncc":
-        similarity_function = compute_normalized_cross_correlation
-    else:
-        raise ValueError(f"Unsupported similarity metric: {similarity_metric}")
-    active_levels=7
-    learning_rates_per_level=[0.005, 0.0025, 0.0025, 0.0025, 0.0025, 0.0025, 0.0015]
-    # Process each resolution level
-    for level_idx in range(active_levels):
-        # Get images at current resolution
-        current_moving = moving_pyramid[level_idx]
-        current_fixed = fixed_pyramid[level_idx]
-        
-        logger.info(f"Starting level {level_idx}/{active_levels-1} - " +
-                    f"Resolution: {current_moving.size(2)}x{current_moving.size(3)}")
-        
-        # Initialize or resize deformation field for current level
-        if level_idx == 0:
-            if starting_deformation is None:
-                logger.info("Initializing zero displacement field")
-                deformation_field = initialize_zero_vector_field(current_moving).detach().clone()
-                deformation_field.requires_grad = True
-            else:
-                logger.info("Using provided initial displacement field")
-                deformation_field = scale_deformation_field(
-                    starting_deformation, 
-                    (current_moving.size(2), current_moving.size(3))
-                ).detach().clone()
-                deformation_field.requires_grad = True
-                
-            # Initialize optimizer
-            optimizer = topt.Adam([deformation_field], learning_rates_per_level[level_idx])
+    # Setup
+    device = t.device(compute_device) if isinstance(compute_device, str) else compute_device
+    src_t, tgt_t = prepare_image_tensors(source, target, device)
+    aligned_source = cv2.warpAffine(source, np.eye(2, 3), (target.shape[1], target.shape[0]), borderMode=cv2.BORDER_REFLECT)
+    source_t, target_t = prepare_image_tensors(aligned_source, target, device)
+
+    pyramid_levels = 6
+    src_pyr = create_multiscale_representation(source_t, pyramid_levels)
+    tgt_pyr = create_multiscale_representation(target_t, pyramid_levels)
+
+    # Hyperparameters
+    iterations_per_level = [200, 200, 150, 100, 100, 80]
+    learning_rates = [0.01, 0.005, 0.002, 0.002, 0.001, 0.0005]
+    regularization_weights = [10.0, 1.5, 1.2, 1.0, 0.8, 0.4]
+    smoothing_sigma = 1.25
+    prev_def_field = None
+    # Loop through pyramid levels
+    for lvl in range(pyramid_levels):
+        curr_src = src_pyr[lvl]
+        curr_tgt = tgt_pyr[lvl]
+        H, W = curr_src.shape[2:]
+
+        # Initialize or upsample deformation field
+        if lvl == 0:
+            def_field = initialize_deformation_field(curr_src).detach().clone().requires_grad_(True)
         else:
-            # Upscale previous field to current resolution
-            logger.info(f"Upscaling deformation field to {current_moving.size(2)}x{current_moving.size(3)}")
-            deformation_field = scale_deformation_field(
-                deformation_field, 
-                (current_moving.size(2), current_moving.size(3))
-            ).detach().clone()
-            deformation_field.requires_grad = True
-            
-            # Reset optimizer for new level
-            optimizer = topt.Adam([deformation_field], learning_rates_per_level[level_idx])
-        iterations_per_level=7*[400]
-        regularization_weights=[12, 1.2, 1.2, 1.2, 1.2, 0.10, 0.6]
-        # regularization_weights=1
-        # Optimization at current level
-        pbar = tqdm(range(iterations_per_level[level_idx]), disable=not verbose)
-        for iter_idx in pbar:
-            with t.set_grad_enabled(True):
-                # Apply current deformation
-                warped_moving = apply_deformation_field(current_moving, deformation_field, 
-                                                    compute_device=compute_device)
-                
-                # Print initial metrics
-                if iter_idx == 0 and verbose:
-                    initial_similarity = similarity_function(
-                        current_moving, current_fixed, 
-                        compute_device=compute_device, 
-                        **similarity_metric_params
-                    )
-                    first_warp_similarity = similarity_function(
-                        warped_moving, current_fixed, 
-                        compute_device=compute_device, 
-                        **similarity_metric_params
-                    )
-                    logger.info(f"Initial similarity: {initial_similarity.item():.6f}")
-                    logger.info(f"First warp similarity: {first_warp_similarity.item():.6f}")
-                
-                # Calculate loss components
-                similarity_loss = similarity_function(
-                    warped_moving, current_fixed, 
-                    compute_device=compute_device, 
-                    **similarity_metric_params
-                )
-                # smoothness_loss_adapt = diffusion_adaptive_tc(
-                #     deformation_field, 
-                #     compute_device=compute_device, 
-                #     **deformation_regularization_params
-                # )
-                # print("adaptive diffusive regularizer",smoothness_loss_adapt)
-                # smoothness_loss_tv = tv_regularizer(
-                #     deformation_field, 
-                #     compute_device=compute_device, 
-                #     **deformation_regularization_params
-                # )
-                # print("tv regularizer",smoothness_loss_tv)
-                smoothness_loss = calculate_smoothness_penalty(
-                    deformation_field, 
-                    compute_device=compute_device, 
-                    **deformation_regularization_params
-                )
-                # print("relative diffusive regularizer",smoothness_loss_adapt)
-                # smoothness_loss=max(smoothness_loss_adapt,smoothness_loss_reg, smoothness_loss_tv)
-                # Combine with regularization weight
-                total_loss = similarity_loss + regularization_weights[level_idx] * smoothness_loss
-                
-                # Add optional constraint if provided
-                if constraint_function is not None:
-                    constraint_loss = constraint_function(deformation_field, **constraint_params)
-                    total_loss = total_loss + constraint_loss
-                
-                # Backpropagate and update
-                total_loss.backward()
-                optimizer.step()
-                
-            # Reset gradient for next iteration
-            optimizer.zero_grad()
-            
-            # Update progress bar
-            pbar.set_description(
-                f"Level {level_idx}/{active_levels-1} | "
-                f"Sim: {similarity_loss.item():.4f} | "
-                f"Smooth: {smoothness_loss.item():.4f}"
-            )
-            
-            # Save intermediate results if requested
-            if save_intermediate and output_dir is not None and iter_idx % 25 == 0:
-                # Convert warped image to numpy
-                warped_np = warped_moving.detach().cpu().numpy()[0, 0]
-                
-                # Save warped image
-                img_path = output_dir / f"level{level_idx}_iter{iter_idx}_warped.png"
-                cv2.imwrite(str(img_path), (warped_np * 255).astype(np.uint8))
-    
-    # If not all levels were used, upscale to full resolution
-    if active_levels != pyramid_levels:
-        logger.info(f"Upscaling final field to full resolution {original_moving_tensor.size(2)}x{original_moving_tensor.size(3)}")
-        deformation_field = scale_deformation_field(
-            deformation_field, 
-            (original_moving_tensor.size(2), original_moving_tensor.size(3))
-        )
-    
-    # Report final deformation field statistics
-    logger.info(f"Final deformation field range: {deformation_field.min().item():.4f} to {deformation_field.max().item():.4f}")
-    
-    # Apply final deformation to source image
-    final_warped = apply_deformation_field(original_moving_tensor, deformation_field)
-    
-    # Compute final similarity
-    final_similarity = similarity_function(
-        final_warped, original_fixed_tensor,
-        compute_device=compute_device,
-        **similarity_metric_params
-    )
-    logger.info(f"Final similarity score: {final_similarity.item():.6f}")
-    
-    # Save final results if requested
-    if output_dir is not None:
-        # Save final warped image
-        final_warped_np = final_warped.detach().cpu().numpy()[0, 0]
-        final_img_path = output_dir / "final_warped.png"
-        cv2.imwrite(str(final_img_path), (final_warped_np * 255).astype(np.uint8))
-        
-        # Create comparison image (side by side)
-        fixed_np = original_fixed_tensor.detach().cpu().numpy()[0, 0]
-        comparison = np.hstack((fixed_np, final_warped_np))
-        comparison_path = output_dir / "comparison.png"
-        cv2.imwrite(str(comparison_path), (comparison * 255).astype(np.uint8))
-    
-    return deformation_field, final_warped
+            def_field = scale_deformation_field(prev_def_field, (H, W)).detach().clone().requires_grad_(True)
+
+        # Optimizer: LBFGS on final level, Adam otherwise
+        if lvl == pyramid_levels - 1:
+            optimizer = topt.LBFGS([def_field], lr=learning_rates[lvl], max_iter=50, line_search_fn="strong_wolfe")
+        else:
+            optimizer = topt.Adam([def_field], lr=learning_rates[lvl])
+
+        weight = regularization_weights[lvl]
+
+        for iter_idx in tqdm(range(iterations_per_level[lvl]), disable=not verbose, desc=f"Level {lvl}/{pyramid_levels-1}"):
+            def closure():
+                optimizer.zero_grad()
+                warped = apply_deformation_field(curr_src, def_field, compute_device=device)
+                sim_loss = compute_normalized_cross_correlation(warped, curr_tgt, compute_device=device, **similarity_metric_params)
+                reg_loss = deformation_loss(def_field, compute_device=device)
+                loss = sim_loss + weight * reg_loss
+                loss.backward()
+                return loss
+
+            loss = optimizer.step(closure)
+
+            with t.no_grad():
+                # Optional clipping to prevent folding
+                max_disp = 5.0  # pixels
+                def_field.clamp_(-max_disp, max_disp)
+
+        prev_def_field = def_field
+
+    # Upsample to original shape if needed
+    final_def = scale_deformation_field(prev_def_field, (src_t.size(2), src_t.size(3))) if pyramid_levels != pyramid_levels else prev_def_field
+    final_warped = apply_deformation_field(src_t, final_def, compute_device=device)
+
+    # # Save outputs if needed
+    # if output_dir:
+    #     os.makedirs(output_dir, exist_ok=True)
+    #     cv2.imwrite(os.path.join(output_dir, "final_warped.png"), (final_warped.detach().cpu().numpy()[0, 0] * 255).astype(np.uint8))
+
+    return final_def, final_warped
+
+
+
+def compute_deformation_and_apply(
+    source_prep,
+    final_transform,
+    displacement_field,
+    moving_df,
+    fixed_df,
+    padding_params,
+    util,
+    pad_landmarks,
+):
+    """
+    Compute the final deformation field by combining rigid and non-rigid transformations,
+    then apply it to the moving landmark points.
+
+    Parameters
+    ----------
+    source_prep : np.ndarray
+        Preprocessed source image used for rigid transformation.
+    final_transform : object
+        Transformation model or matrix from rigid registration.
+    displacement_field : torch.Tensor or np.ndarray
+        The predicted displacement field (2D vector field).
+    moving_df : pandas.DataFrame
+        DataFrame containing moving landmark coordinates with columns ['global_x', 'global_y'].
+    fixed_df : pandas.DataFrame
+        DataFrame containing fixed landmark coordinates with columns ['global_x', 'global_y'].
+    padding_params : tuple
+        Padding parameters required by `pad_landmarks`.
+    util : module
+        Utility module containing helper functions:
+        - rigid_dot
+        - tc_df_to_np_df
+        - compose_vector_fields
+        - apply_deformation_to_points
+    pad_landmarks : callable
+        Function to pad landmark coordinates to match deformation field dimensions.
+
+    Returns
+    -------
+    deformation_field : np.ndarray
+        Combined deformation field, shape (2, H, W).
+    moving_updated : np.ndarray
+        Updated (deformed) moving points, scaled back to original coordinates.
+    fixed_points : np.ndarray
+        Fixed points, scaled back to original coordinates.
+    moving_points : np.ndarray
+        Original moving points, scaled back to original coordinates.
+    """
+
+    # Step 1: Rigid transformation
+    i_x, i_y = util.rigid_dot(source_prep, final_transform)
+
+    # Step 2: Convert and compose with displacement field
+    disp_field_np = util.tc_df_to_np_df(displacement_field)
+    r_x, r_y = util.compose_vector_fields(i_x, i_y, disp_field_np[0], disp_field_np[1])
+    deformation_field = np.stack((r_x, r_y), axis=0)
+
+    print("Deformation field shape:", deformation_field.shape)
+
+    # Step 3: Prepare landmark coordinates
+    moving_points = moving_df[['global_x', 'global_y']].values / 64
+    fixed_points = fixed_df[['global_x', 'global_y']].values / 64
+    moving_points, fixed_points = pad_landmarks(padding_params, moving_points, fixed_points)
+
+    # Step 4: Apply deformation
+    moving_updated = util.apply_deformation_to_points(moving_points, deformation_field)
+
+    # Step 5: Scale back to original pixel space
+    fixed_points = fixed_points * 64
+    moving_points = moving_points * 64
+    moving_updated = moving_updated * 64
+
+    return deformation_field, moving_updated, fixed_points, moving_points

@@ -3,20 +3,24 @@ Configuration file for WSI registration project
 """
 
 # File paths
-SOURCE_WSI_PATH = "/home/u5552013/Desktop/RegistrationDataset/HyReCo/KI67/533.tif"
-TARGET_WSI_PATH = "/home/u5552013/Desktop/RegistrationDataset/HyReCo/HE/533.tif"
+SOURCE_WSI_PATH = "/home/u5552013/Nextcloud/HYRECO/Data/Image/ki67_533.tif"
+TARGET_WSI_PATH = "/home/u5552013/Nextcloud/HYRECO/Data/Image/he_533.tif"
+
+
+# SOURCE_WSI_PATH='/home/u5552013/Nextcloud/ANHIR/COAD_02/scale-25pc/S2.jpg'
+# TARGET_WSI_PATH='/home/u5552013/Nextcloud/ANHIR/COAD_02/scale-25pc/S5.jpg'
 
 # Landmark paths
-MOVING_POINTS_PATH = "/home/u5552013/Desktop/RegistrationDataset/HyReCo/KI67/533.csv"
-FIXED_POINTS_PATH = "/home/u5552013/Desktop/RegistrationDataset/HyReCo/HE/533.csv"
+MOVING_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/ki67_533.csv"
+FIXED_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/he_533.csv"
 
 # Alternative landmark paths for evaluation
-EVAL_MOVING_POINTS_PATH = "/home/u5552013/Desktop/RegistrationDataset/HyReCo/KI67/533.csv"
-EVAL_FIXED_POINTS_PATH = "/home/u5552013/Desktop/RegistrationDataset/HyReCo/HE/533.csv"
+EVAL_MOVING_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/ki67_533.csv"
+EVAL_FIXED_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/he_533.csv"
 
 # Output CSV paths
-FIXED_NUCLEI_CSV = ''
-MOVING_NUCLEI_CSV = ''
+FIXED_NUCLEI_CSV = '/home/u5552013/Nextcloud/HYRECO/Data/nuclei_points/he_533_nuclei.csv'
+MOVING_NUCLEI_CSV = '/home/u5552013/Nextcloud/HYRECO/Data/nuclei_points/ki67_533_nuclei.csv'
 
 # Registration parameters
 PREPROCESSING_RESOLUTION = 0.625

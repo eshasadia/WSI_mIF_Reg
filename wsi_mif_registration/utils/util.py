@@ -7,8 +7,10 @@ from skimage import exposure, filters, img_as_float, color
 from skimage import measure, morphology
 from skimage.registration import phase_cross_correlation
 from sklearn.neighbors import NearestNeighbors
+from sklearn.cluster import KMeans
 from scipy import ndimage
 from scipy import ndimage as nd
+from scipy.ndimage import map_coordinates
 from tiatoolbox.utils.metrics import dice
 from tiatoolbox import logger, rcParam
 import math
@@ -24,12 +26,109 @@ import math
 
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
+
+def skip_subsample(points, n_samples=1000):
+    total_points = points.shape[0]
+    if total_points <= n_samples:
+        return points
+    step = total_points // n_samples
+    return points[::step][:n_samples] 
+
 def gamma_corrections(img, gamma):
         invGamma = 1.0 / gamma
         table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
         return cv2.LUT(img, table)
     
+import numpy as np
+import SimpleITK as sitk
 
+def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, output_path='./533_finerigid.mha'):
+    """
+    Creates a deformation field by scaling a 3x3 transformation matrix and 
+    composing it with given vector fields.
+
+    Parameters
+    ----------
+    shape_transform : np.ndarray
+        A 3x3 transformation matrix (affine or rigid).
+    source_prep : np.ndarray
+        Source coordinate grid or image array used for transformation.
+    u_x, u_y : np.ndarray
+        Components of an existing deformation field (x and y displacement maps).
+    util : module
+        A module or object providing two functions:
+            - rigid_dot(source, transform): applies rigid transformation.
+            - compose_vector_fields(u_x, u_y, t_x, t_y): composes deformation fields.
+    output_path : str, optional
+        Path to save the resulting deformation field as an .mha file.
+
+    Returns
+    -------
+    sitk.Image
+        The resulting deformation field as a SimpleITK image.
+    """
+
+    # Define scale factor
+    scale_factor = 0.625 / 40  # equivalent to 0.015625
+
+    # Scale the translation components of the transformation matrix
+    transform_3x3_scaled = shape_transform.copy()
+    transform_3x3_scaled[0:2, 2] *= scale_factor
+
+    # Apply inverse of scaled transform
+    sh_transform = transform_3x3_scaled
+    t_x, t_y = rigid_dot(source_prep, np.linalg.inv(sh_transform))
+
+    # Compose the new vector field
+    f_x, f_y = compose_vector_fields(u_x, u_y, t_x, t_y)
+
+    # Stack into deformation field
+    deformation_field = np.stack((f_x, f_y), axis=-1)
+
+    # Convert to SimpleITK image and save
+    sitk_image = sitk.GetImageFromArray(deformation_field)
+    sitk.WriteImage(sitk_image, output_path)
+
+    return sitk_image
+
+
+def apply_deformation_to_points(points, deformation_field):
+    """
+    Apply a deformation field to a set of 2D points.
+
+    Args:
+        points: np.array of shape (N, 2), points as (x, y) coordinates.
+        deformation_field: np.array of shape (2, H, W), displacement vectors.
+                           deformation_field[0] is displacement in x,
+                           deformation_field[1] is displacement in y.
+
+    Returns:
+        warped_points: np.array of shape (N, 2), warped point coordinates.
+    """
+    # Extract deformation components
+    disp_x = deformation_field[0]
+    disp_y = deformation_field[1]
+
+    H, W = disp_x.shape
+    print("height", H)
+    print("width", W)
+    # Points might be float and anywhere inside image, so use interpolation of deformation field
+    # Interpolate displacement at each point's coordinate
+    warped_points = np.zeros_like(points)
+
+    # Points are (x, y), but map_coordinates requires (row, col) = (y, x)
+    # So we need to query displacement fields at (y, x)
+    coords = np.array([points[:,1], points[:,0]])  # shape (2, N)
+
+    # Interpolate displacement fields at these coords
+    disp_at_points_x = map_coordinates(disp_x, coords, order=1, mode='nearest')
+    disp_at_points_y = map_coordinates(disp_y, coords, order=1, mode='nearest')
+
+    # Apply displacement: new_pos = original_pos + displacement
+    warped_points[:, 0] = points[:, 0] + disp_at_points_x
+    warped_points[:, 1] = points[:, 1] + disp_at_points_y
+
+    return warped_points
 
 
 def create_displacement_field_for_wsi(transform_matrix, source_thumbnail, target_thumbnail):    
@@ -496,64 +595,7 @@ def rotate_point(x, y, cx, cy, angle):
     
     return x_prime, y_prime
 
-class Transformations:
-    """
-    Transformation parameters used to store parameters gathered during registration algorithms
-    """
-    # Intialise transformation matrix parameters.
-    rotation_angle = 0
-    translation_vector = np.array([0, 0])
-    scale_vector = np.array([1, 1])
-    original_moving = None
-    final_moving = None
-    com = np.array([0, 0])
-    icp_transform = None
-    start_points = None
-    end_points = None
 
-
-    def setCOM(self, com):
-        # Center of mass
-        self.com = com
-
-    def setIcpTransform(self, matrix):
-        # ICP rotation transformation
-        self.icp_transform = matrix
-
-    def setOriginalMoving(self, moving):
-        # Set the moving point set before non rigid registration
-        if moving.shape[1]==3:
-            self.original_moving = moving[:, :-1].copy()
-        else:
-            self.original_moving = moving.copy()
-    
-    def setFinalMoving(self, moving):
-        # Set the moving point set after non rigid registration
-        if moving.shape[1]==3:
-            self.final_moving = moving[:, :-1].copy()
-        else:
-            self.final_moving = moving.copy()
-
-    def setRotation(self, angle):
-        self.rotation_angle = angle
-
-    def setTranslation(self, vector):
-        self.translation_vector = vector
-
-    def setScale(self, scale):
-        self.scale_vector = scale
-
-    def check_valid(self):
-        # Check if all parameters are valid.
-        if self.rotation_angle is not None and self.translation_vector is not None and self.scale_vector is not None \
-        and self.original_moving is not None and self.final_moving is not None:
-            return True
-        return False
-
-    def __str__(self) -> str:
-        # Print all parameters for reference.
-        answer = f"Rotation: {self.rotation_angle}, Scale: [{self.scale_vector[0]}, {self.scale_vector[1]}] , Translation: [{self.translation_vector[0]}, {self.translation_vector[1]}]"
-        return answer
     
 def phase_correlation(fixed, moving):
     # Run phase correlation shift between point sets as second measure for translation.
@@ -941,65 +983,6 @@ def rotate_point(x, y, cx, cy, angle):
     
     return x_prime, y_prime
 
-class Transformations:
-    """
-    Transformation parameters used to store parameters gathered during registration algorithms
-    """
-    # Intialise transformation matrix parameters.
-    rotation_angle = 0
-    translation_vector = np.array([0, 0])
-    scale_vector = np.array([1, 1])
-    original_moving = None
-    final_moving = None
-    com = np.array([0, 0])
-    icp_transform = None
-    start_points = None
-    end_points = None
-
-
-    def setCOM(self, com):
-        # Center of mass
-        self.com = com
-
-    def setIcpTransform(self, matrix):
-        # ICP rotation transformation
-        self.icp_transform = matrix
-
-    def setOriginalMoving(self, moving):
-        # Set the moving point set before non rigid registration
-        if moving.shape[1]==3:
-            self.original_moving = moving[:, :-1].copy()
-        else:
-            self.original_moving = moving.copy()
-    
-    def setFinalMoving(self, moving):
-        # Set the moving point set after non rigid registration
-        if moving.shape[1]==3:
-            self.final_moving = moving[:, :-1].copy()
-        else:
-            self.final_moving = moving.copy()
-
-    def setRotation(self, angle):
-        self.rotation_angle = angle
-
-    def setTranslation(self, vector):
-        self.translation_vector = vector
-
-    def setScale(self, scale):
-        self.scale_vector = scale
-
-    def check_valid(self):
-        # Check if all parameters are valid.
-        if self.rotation_angle is not None and self.translation_vector is not None and self.scale_vector is not None \
-        and self.original_moving is not None and self.final_moving is not None:
-            return True
-        return False
-
-    def __str__(self) -> str:
-        # Print all parameters for reference.
-        answer = f"Rotation: {self.rotation_angle}, Scale: [{self.scale_vector[0]}, {self.scale_vector[1]}] , Translation: [{self.translation_vector[0]}, {self.translation_vector[1]}]"
-        return answer
-    
 
 
 def matchpoints(points):

@@ -2,14 +2,14 @@ import numpy as np
 import cv2
 import numpy as np
 import math
-from tiatoolbox.wsicore.wsireader import WSIReader
+from tiatoolbox.wsicore.wsireader import WSIReader, VirtualWSIReader
 import wsi_mif_registration.preprocessing.tissuemask as tissuemask
 import wsi_mif_registration.preprocessing.preprocessing as prep  # Original preprocessing module
 
 """
 Preprocessing functions for WSI registration
 """
-def load_wsi_images(source_path, target_path, resolution=0.625):
+def load_wsi_images(source_path, target_path, resolution=0.625, data=''):
     """
     Load source and target WSI images
     
@@ -22,15 +22,29 @@ def load_wsi_images(source_path, target_path, resolution=0.625):
         tuple: (source_wsi, target_wsi, source_image, target_image)
     """
     # Load WSI readers
-    source_wsi = WSIReader.open(source_path)
-    target_wsi = WSIReader.open(target_path)
-    
-    # Load images at specified resolution
-    source = load_slide(source_path, resolution)
-    target = load_slide(target_path, resolution)
-    
-    print(f"Source original shape: {source.shape}")
-    print(f"Target original shape: {target.shape}")
+    if data=='anhir':
+        target_wsi = VirtualWSIReader.open(target_path)
+        source_wsi = VirtualWSIReader.open(source_path)
+
+        # Manually set the objective power if it's None
+        if target_wsi.info.objective_power is None:
+            target_wsi.info.objective_power = 10.0  # Set to a standard value like 20x or 40x
+        if source_wsi.info.objective_power is None:
+            source_wsi.info.objective_power = 10.0
+        
+        target = target_wsi.slide_thumbnail(resolution=resolution, units="power")
+        source = source_wsi.slide_thumbnail(resolution=resolution, units="power")
+        
+    else:
+        source_wsi = WSIReader.open(source_path)
+        target_wsi = WSIReader.open(target_path)
+        
+        # Load images at specified resolution
+        source = load_slide(source_path, resolution)
+        target = load_slide(target_path, resolution)
+        
+        print(f"Source original shape: {source.shape}")
+        print(f"Target original shape: {target.shape}")
     
     return source_wsi, target_wsi, source, target
 
@@ -56,7 +70,7 @@ def preprocess_images(source, target):
     return source_prep, target_prep
 
 
-def extract_tissue_masks(source_prep, target_prep):
+def extract_tissue_masks(source_prep, target_prep, artefacts):
     """
     Extract tissue masks from preprocessed images
     
@@ -68,8 +82,8 @@ def extract_tissue_masks(source_prep, target_prep):
         tuple: (source_mask, target_mask)
     """
     extractor = tissuemask.FlorenceTissueMaskExtractor()
-    source_mask = extractor.extract(source_prep)
-    target_mask = extractor.extract(target_prep)
+    source_mask = extractor.extract(source_prep, artefacts)
+    target_mask = extractor.extract(target_prep, artefacts)
     
     return source_mask, target_mask
 
