@@ -8,8 +8,8 @@ from skimage import morphology, measure
 from scipy import ndimage
 import os 
 # import vision_agent
-# Set the API key for Vision Agent (if needed)
-os.environ["VISION_AGENT_API_KEY"] = "OHFhaGJxODc1YTE3Nmx6Z2gyN3U4OkF5aGJXZlFoRUpHRGRodUViNjVEbzQ1aEpSb2M1YzBL"
+# Set the API key for Vision Agent 
+os.environ["VISION_AGENT_API_KEY"] = ""
 from vision_agent.tools import florence2_sam2_instance_segmentation
 from tiatoolbox.models.engine.semantic_segmentor import SemanticSegmentor
 from tiatoolbox.models.architecture.unet import UNetModel
@@ -267,7 +267,7 @@ class UNetTissueMaskExtractor:
 """
 Example
 extractor = UNetTissueMaskExtractor(
-    model_path="/home/u5552013/cloud_workspace/20250414/src/weights/unet-acrobat-v3-01.pth",
+    model_path="",
     device="cuda"
 )
 

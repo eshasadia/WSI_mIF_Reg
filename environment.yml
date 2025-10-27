@@ -1,0 +1,21 @@
+name: core
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - pytorch
+  - torchvision
+  - torchaudio
+  - cudatoolkit=11.8   # Only if you want GPU support, adjust based on your CUDA version
+  - opencv
+  - scikit-image
+  - scipy
+  - pillow
+  - pillow-heif
+  - tiatoolbox
+  - pip
+  - pip:
+      - vision-agent
+     
