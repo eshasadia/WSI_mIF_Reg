@@ -14,7 +14,7 @@ from vision_agent.tools import florence2_sam2_instance_segmentation
 from tiatoolbox.models.engine.semantic_segmentor import SemanticSegmentor
 from tiatoolbox.models.architecture.unet import UNetModel
 from pillow_heif import register_heif_opener
-import wsi_mif_registration.preprocessing.stainnorm as stainnorm
+import core.preprocessing.stainnorm as stainnorm
 register_heif_opener()
 
 

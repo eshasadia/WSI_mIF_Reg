@@ -3,14 +3,14 @@ import cv2
 from skimage import exposure
 from skimage import img_as_float
 from tiatoolbox.utils.metrics import dice
-from wsi_mif_registration.evaluation.evaluation import ngf_metric 
+from core.evaluation.evaluation import ngf_metric 
 import logging
 import sys
 from tiatoolbox.tools import patchextraction
 from tiatoolbox.tools.registration.wsi_registration import AffineWSITransformer
 from skimage.registration import phase_cross_correlation
 from accelerated_features.modules.xfeat import XFeat
-import wsi_mif_registration.utils.util as util
+import core.utils.util as util
 import cv2
 import numpy as np
 

@@ -7,9 +7,9 @@
 # import pandas as pd
 # from tiatoolbox.tools import patchextraction
 # from tiatoolbox.tools.registration.wsi_registration import AffineWSITransformer
-# import wsi_mif_registration.utils.util as util
-# from wsi_mif_registration.config import FIXED_THRESHOLD, MOVING_THRESHOLD, MIN_NUCLEI_AREA, GAMMA_CORRECTION
-# from wsi_mif_registration.preprocessing.preprocessing import process_nuclei_patch
+# import core.utils.util as util
+# from core.config import FIXED_THRESHOLD, MOVING_THRESHOLD, MIN_NUCLEI_AREA, GAMMA_CORRECTION
+# from core.preprocessing.preprocessing import process_nuclei_patch
 
 
 # def extract_patches_from_wsi(wsi, mask, patch_size=(1000, 1000), stride=(1000, 1000)):
@@ -274,8 +274,8 @@ import numpy as np
 import pandas as pd
 from tiatoolbox.tools import patchextraction
 from tiatoolbox.tools.registration.wsi_registration import AffineWSITransformer
-import wsi_mif_registration.utils.util as util
-from wsi_mif_registration.config import FIXED_THRESHOLD, MOVING_THRESHOLD, MIN_NUCLEI_AREA, GAMMA_CORRECTION
+import core.utils.util as util
+from core.config import FIXED_THRESHOLD, MOVING_THRESHOLD, MIN_NUCLEI_AREA, GAMMA_CORRECTION
 
 def process_nuclei_patch(img, threshold, gamma=None, min_area=200):
     """

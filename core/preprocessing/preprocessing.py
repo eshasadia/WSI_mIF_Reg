@@ -3,8 +3,8 @@ import cv2
 import numpy as np
 import math
 from tiatoolbox.wsicore.wsireader import WSIReader, VirtualWSIReader
-import wsi_mif_registration.preprocessing.tissuemask as tissuemask
-import wsi_mif_registration.preprocessing.preprocessing as prep  # Original preprocessing module
+import core.preprocessing.tissuemask as tissuemask
+import core.preprocessing.preprocessing as prep  # Original preprocessing module
 
 """
 Preprocessing functions for WSI registration

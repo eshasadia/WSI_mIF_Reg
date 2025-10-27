@@ -50,11 +50,11 @@ import os
 
 # Add the 'src' directory to sys.path
 # sys.path.append(os.path.abspath("/home/u5552013/Desktop/WSI_mIF_Registration/src"))
-import wsi_mif_registration.preprocessing.preprocessing
-import wsi_mif_registration.evaluation.evaluation
-import wsi_mif_registration.registration.rigid
-import wsi_mif_registration.registration.nonrigid
-import wsi_mif_registration.utils.util
-import wsi_mif_registration.config
-import wsi_mif_registration.preprocessing.padding
+import core.preprocessing.preprocessing
+import core.evaluation.evaluation
+import core.registration.rigid
+import core.registration.nonrigid
+import core.utils.util
+import core.config
+import core.preprocessing.padding
 from tps import ThinPlateSpline

@@ -11,7 +11,7 @@ from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
 from scipy.spatial import KDTree
 from scipy.optimize import minimize
-import wsi_mif_registration.registration.rigid as rigid
+import core.registration.rigid as rigid
 
 
 def perform_rigid_registration(source_prep, target_prep, source_mask, target_mask):

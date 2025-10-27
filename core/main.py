@@ -4,11 +4,11 @@ Main script for WSI registration workflow
 
 from params import *
 from config import *
-from wsi_mif_registration.preprocessing.preprocessing import *
-from wsi_mif_registration.registration.registration import *
-from wsi_mif_registration.evaluation.evaluation import *
-from wsi_mif_registration.visualization.visualization import *
-from wsi_mif_registration.preprocessing.nuclei_analysis import *
+from core.preprocessing.preprocessing import *
+from core.registration.registration import *
+from core.evaluation.evaluation import *
+from core.visualization.visualization import *
+from core.preprocessing.nuclei_analysis import *
 
 
 def main():

@@ -12,7 +12,7 @@ from bokeh.palettes import Viridis256, Inferno256
 from bokeh.io import output_notebook
 import sys
 import importlib
-from wsi_mif_registration.config import VisualizationParams
+from core.config import VisualizationParams
 from skimage import color
 
 def setup_bokeh_notebook():
