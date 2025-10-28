@@ -22,7 +22,8 @@ import csv
 import torch
 import numpy as np
 import math
-
+import numpy as np
+import SimpleITK as sitk
 
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
@@ -39,8 +40,7 @@ def gamma_corrections(img, gamma):
         table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
         return cv2.LUT(img, table)
     
-import numpy as np
-import SimpleITK as sitk
+
 
 def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, output_path='./533_finerigid.mha'):
     """
@@ -406,14 +406,7 @@ def create_pyramid(array: np.ndarray, num_levels: int, mode: str = 'bilinear'):
             new_array = resample_tensor_to_size(gaussian_smoothing(pyramid[i + 1], 1), new_size, mode=mode)
             pyramid[i] = new_array
     return pyramid
-def rigid_dot(image, matrix):
-    y_size, x_size,_ = np.shape(image)
-    x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones(np.shape(image)).ravel()))
-    transformed_points = matrix @ points
-    u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
-    u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
-    return u_x, u_y
+
 def scale_transformation_matrix(transform_matrix, input_res, output_res):
     """
     Upscale the transformation matrix to the original image resolution.
@@ -553,23 +546,7 @@ def mse(fixed, moving):
 
     return mse_value
 
-def compute_center_of_mass(mask: np.ndarray) -> tuple:
-    """Compute center of mass.
 
-    Args:
-        mask: (:class:`numpy.ndarray`):
-            A binary mask.
-
-    Returns:
-        :py:obj:`tuple` - x- and y- coordinates representing center of mass.
-            - :py:obj:`int` - X coordinate.
-            - :py:obj:`int` - Y coordinate.
-
-    """
-    moments = cv2.moments(mask)
-    x_coord_center = moments["m10"] / moments["m00"]
-    y_coord_center = moments["m01"] / moments["m00"]
-    return (x_coord_center, y_coord_center)
 
 def rotate_point(x, y, cx, cy, angle):
     """
@@ -757,15 +734,7 @@ def calculate_resample_size(source, target, output_max_size):
     rescale_ratio = max_dim/output_max_size
     return rescale_ratio
 
-def rigid_dot(image, matrix):
-    y_size, x_size,_ = np.shape(image)
-    x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    # You should use:
-    points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones_like(x_grid).ravel()))
-    transformed_points = matrix @ points
-    u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
-    u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
-    return u_x, u_y
+
 
 def tc_df_to_np_df(displacement_field_tc: torch.Tensor):
     ndim = len(displacement_field_tc.size()) - 2
