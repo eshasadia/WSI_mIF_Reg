@@ -2,6 +2,7 @@
 [![arXiv](https://img.shields.io/badge/arXiv-2403.05780-b31b1b.svg)](https://arxiv.org/html/2511.03826v2)
 [![Greetings](https://github.com/eshasadia/CORE/actions/workflows/greetings.yml/badge.svg)](https://github.com/eshasadia/CORE/actions/workflows/greetings.yml)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
+[![pages-build-deployment](https://github.com/eshasadia/CORE/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/eshasadia/CORE/actions/workflows/pages/pages-build-deployment)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 [![Last Commit](https://img.shields.io/github/last-commit/eshasadia/CORE/main.svg)](https://github.com/eshasadia/CORE)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
