@@ -1,4 +1,4 @@
-# <img src="https://github.com/user-attachments/assets/2f7f299f-1f04-4a7d-b650-54b8ce96c570 width="35" height="35"/> CORE - A Cell-Level Coarse-to-Fine Image Registration Engine for Multi-stain Image Alignment
+# <img src="https://github.com/user-attachments/assets/2f7f299f-1f04-4a7d-b650-54b8ce96c570" width="35" height="35"> CORE - A Cell-Level Coarse-to-Fine Image Registration Engine for Multi-stain Image Alignment
 [![arXiv](https://img.shields.io/badge/arXiv-2403.05780-b31b1b.svg)](https://arxiv.org/html/2511.03826v2)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
