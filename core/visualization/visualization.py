@@ -101,6 +101,8 @@ def visualize_cluster_alignment(
         plt.show()
 
     return fixed_df, moving_df
+
+
 def visualize_overlays(fixed_tile, moving_tile, transformed_tile):
     overlay_before = np.dstack((
         color.rgb2gray(moving_tile),

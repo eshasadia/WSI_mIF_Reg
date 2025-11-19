@@ -1,22 +1,14 @@
 """
-Configuration file for WSI registration project
+Configuration file for CORE
 """
 
 # File paths
-SOURCE_WSI_PATH = "/home/u5552013/Nextcloud/HYRECO/Data/Image/ki67_533.tif"
-TARGET_WSI_PATH = "/home/u5552013/Nextcloud/HYRECO/Data/Image/he_533.tif"
+SOURCE_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1.svs'
+TARGET_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1_ome.tiff'
 
 
-# SOURCE_WSI_PATH='/home/u5552013/Nextcloud/ANHIR/COAD_02/scale-25pc/S2.jpg'
-# TARGET_WSI_PATH='/home/u5552013/Nextcloud/ANHIR/COAD_02/scale-25pc/S5.jpg'
-
-# Landmark paths
 MOVING_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/ki67_533.csv"
 FIXED_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/he_533.csv"
-
-# # Alternative landmark paths for evaluation
-# EVAL_MOVING_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/ki67_533.csv"
-# EVAL_FIXED_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/he_533.csv"
 
 # Output CSV paths
 FIXED_NUCLEI_CSV = '/home/u5552013/Nextcloud/HYRECO/Data/nuclei_points/he_533_nuclei.csv'
@@ -41,15 +33,6 @@ GAMMA_CORRECTION = 0.4
 
 # Registration algorithm parameters
 class RegistrationParams:
-    # ICP parameters
-    ICP_THRESHOLD = 50000.0
-    
-    # CPD parameters
-    CPD_BETA = 0.5  # larger beta increases influence radius (smoother)
-    CPD_ALPHA = 0.01  # lower alpha reduces the regularization
-    CPD_MAX_ITERATIONS = 200
-    CPD_TOLERANCE = 1e-9
-    
     # MNN sampling
     MNN_SAMPLE_SIZE = 5000
     

@@ -665,15 +665,23 @@ def warp_image(image, u_x, u_y):
     y_size, x_size = image.shape
     grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
     return nd.map_coordinates(image, [grid_y + u_y, grid_x + u_x], order=3, cval=0.0)
-
 def rigid_dot(image, matrix):
     y_size, x_size,_ = np.shape(image)
     x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones(np.shape(image)).ravel()))
+    # You should use:
+    points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones_like(x_grid).ravel()))
     transformed_points = matrix @ points
     u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
     u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
     return u_x, u_y
+# def rigid_dot(image, matrix):
+#     y_size, x_size,_ = np.shape(image)
+#     x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
+#     points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones(np.shape(image)).ravel()))
+#     transformed_points = matrix @ points
+#     u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
+#     u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
+#     return u_x, u_y
 
 def load_image(path):
     image = sitk.ReadImage(path)

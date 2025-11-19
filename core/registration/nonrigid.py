@@ -5,12 +5,9 @@ import torch.optim as topt
 import torch as tc
 import torch.nn.functional as F
 from typing import Optional, Tuple, List, Union, Dict, Any
-
 import numpy as np
 import math
 import cv2
- 
-
 from skimage import color
 from pathlib import Path
 from tqdm.auto import tqdm  
@@ -19,13 +16,13 @@ from tqdm.auto import tqdm
 
 
 
-def empty_field(input_tensor: t.Tensor) -> t.Tensor:
+def initialize_deformation_field(input_tensor: t.Tensor) -> t.Tensor:
  
     dim_count = len(input_tensor.size()) - 2
     return t.zeros((input_tensor.size(0), input_tensor.size(2), input_tensor.size(3)) + (dim_count,)).type_as(input_tensor)
 
 
-def coord_grid(input_tensor: Optional[t.Tensor] = None,
+def build_reference_coordinate_system(input_tensor: Optional[t.Tensor] = None,
                                    dimensions: Optional[t.Size] = None,
                                    compute_device: Optional[Union[str, t.device]] = None) -> t.Tensor:
  
@@ -83,52 +80,14 @@ def deformation_loss(vector_field: t.Tensor,
 
 
 
-def resize_tensor(input_tensor: t.Tensor, 
+def scale_tensor_to_dimensions(input_tensor: t.Tensor, 
                             target_dimensions: t.Size, 
                             interpolation_method: str = 'bilinear') -> t.Tensor:
 
     return tfun.interpolate(input_tensor, size=target_dimensions, 
                           mode=interpolation_method, align_corners=False)
 
-
-def ngf(sources: t.Tensor, 
-                                      targets: t.Tensor, 
-                                      device: Optional[Union[str, t.device]] = None, 
-                                      eps: float = 1e-5) -> t.Tensor:
-    ndim = len(sources.size()) - 2
-    if ndim not in [2, 3]:
-        raise ValueError("Unsupported number of dimensions.")
-
-    def gradient(tensor):
-        gradients = []
-        for d in range(ndim):
-            pad_shape = [(0, 0)] * (2 + ndim)
-            pad_shape[2 + d] = (0, 1)
-            pad = [p for sub in reversed(pad_shape) for p in sub]
-            padded = F.pad(tensor, pad, mode='replicate')
-            grad = padded[..., 1:] - padded[..., :-1]
-            gradients.append(grad[..., :-1])  # match original shape
-        return gradients
-
-    # Compute gradients
-    grad_source = gradient(sources)
-    grad_target = gradient(targets)
-
-    # Normalize gradients
-    norm_source = t.sqrt(sum(g**2 for g in grad_source) + eps)
-    norm_target = t.sqrt(sum(g**2 for g in grad_target) + eps)
-    normed_source = [g / norm_source for g in grad_source]
-    normed_target = [g / norm_target for g in grad_target]
-
-    # Compute dot product of normalized gradients
-    dot_products = sum(gs * gt for gs, gt in zip(normed_source, normed_target))
-    
-    # NGF loss
-    ngf_loss = 1 - dot_products
-    return tc.mean(ngf_loss)
-
-
-def ncc(sources: t.Tensor, 
+def compute_normalized_cross_correlation(sources: t.Tensor, 
                                       targets: t.Tensor, 
                                       device: Optional[Union[str, t.device]] = None, 
                                       **config_params) -> t.Tensor:
@@ -168,7 +127,7 @@ def ncc(sources: t.Tensor,
     return -tc.mean(ncc)
 
 
-def deform(input_tensor: t.Tensor, 
+def apply_deformation_field(input_tensor: t.Tensor, 
                          vector_field: t.Tensor, 
                          coord_grid: Optional[t.Tensor] = None, 
                          interpolation_method: str = 'bilinear', 
@@ -180,7 +139,7 @@ def deform(input_tensor: t.Tensor,
         compute_device = t.device(compute_device)
         
     if coord_grid is None:
-        coord_grid = coord_grid(input_tensor=input_tensor, compute_device=compute_device)
+        coord_grid = build_reference_coordinate_system(input_tensor=input_tensor, compute_device=compute_device)
         
     sampling_coordinates = coord_grid + vector_field
     deformed_tensor = tfun.grid_sample(input_tensor, sampling_coordinates, 
@@ -191,7 +150,7 @@ def deform(input_tensor: t.Tensor,
     return deformed_tensor
 
 
-def scale_deform(vector_field: t.Tensor, 
+def scale_deformation_field(vector_field: t.Tensor, 
                           new_dimensions: Union[t.Size, Tuple[int, int]], 
                           interpolation_method: str = 'bilinear') -> t.Tensor:
 
@@ -210,7 +169,7 @@ def scale_deform(vector_field: t.Tensor,
     return resized.permute(0, 2, 3, 1)
 
 
-def multiscale(input_tensor: t.Tensor, 
+def create_multiscale_representation(input_tensor: t.Tensor, 
                                    level_count: int, 
                                    interpolation_method: str = 'bilinear',
                                    scale_factor: float = 2.0) -> List[t.Tensor]:
@@ -233,7 +192,7 @@ def multiscale(input_tensor: t.Tensor,
             
             # Apply smoothing to prevent aliasing, then downsample
             smoothed = gaussian_smoothing(pyramid_levels[i+1], 1)
-            downsampled = resize_tensor(smoothed, spatial_dims, 
+            downsampled = scale_tensor_to_dimensions(smoothed, spatial_dims, 
                                                  interpolation_method)
             
             pyramid_levels[i] = downsampled
@@ -241,7 +200,7 @@ def multiscale(input_tensor: t.Tensor,
     return pyramid_levels
 
 
-def to_tensor(img_array: np.ndarray, compute_device: Union[str, t.device] = "cpu") -> t.Tensor:
+def convert_image_to_tensor(img_array: np.ndarray, compute_device: Union[str, t.device] = "cpu") -> t.Tensor:
   
     # Convert string device specification to torch.device
     if isinstance(compute_device, str):
@@ -262,7 +221,7 @@ def to_tensor(img_array: np.ndarray, compute_device: Union[str, t.device] = "cpu
         raise ValueError(f"Unsupported image dimensions: {img_array.shape}")
 
 
-def prepare_tensor(source_image: np.ndarray, 
+def prepare_image_tensors(source_image: np.ndarray, 
                         target_image: np.ndarray, 
                         compute_device: Union[str, t.device],
                         normalize: bool = True) -> Tuple[t.Tensor, t.Tensor]:
@@ -288,16 +247,14 @@ def prepare_tensor(source_image: np.ndarray,
         gray_target = (gray_target - gray_target.min()) / (gray_target.max() - gray_target.min() + 1e-10)
 
     # Convert to tensor format
-    tensor_source = to_tensor(gray_source, compute_device)
-    tensor_target = to_tensor(gray_target, compute_device)
+    tensor_source = convert_image_to_tensor(gray_source, compute_device)
+    tensor_target = convert_image_to_tensor(gray_target, compute_device)
 
     # Create tensors with gradient tracking
     source_tensor = t.tensor(tensor_source, dtype=t.float32, requires_grad=True).to(compute_device)
     target_tensor = t.tensor(tensor_target, dtype=t.float32, requires_grad=True).to(compute_device)
 
     return source_tensor, target_tensor
-
-
 
 def elastic_image_registration(
     source: np.ndarray, 
@@ -311,13 +268,13 @@ def elastic_image_registration(
 ) -> Tuple[t.Tensor, t.Tensor]:
     # Setup
     device = t.device(compute_device) if isinstance(compute_device, str) else compute_device
-    src_t, tgt_t = prepare_tensor(source, target, device)
+    src_t, tgt_t = prepare_image_tensors(source, target, device)
     aligned_source = cv2.warpAffine(source, np.eye(2, 3), (target.shape[1], target.shape[0]), borderMode=cv2.BORDER_REFLECT)
-    source_t, target_t = prepare_tensor(aligned_source, target, device)
+    source_t, target_t = prepare_image_tensors(aligned_source, target, device)
 
     pyramid_levels = 6
-    src_pyr = multiscale(source_t, pyramid_levels)
-    tgt_pyr = multiscale(target_t, pyramid_levels)
+    src_pyr = create_multiscale_representation(source_t, pyramid_levels)
+    tgt_pyr = create_multiscale_representation(target_t, pyramid_levels)
 
     # Hyperparameters
     iterations_per_level = [200, 200, 150, 100, 100, 80]
@@ -333,9 +290,9 @@ def elastic_image_registration(
 
         # Initialize or upsample deformation field
         if lvl == 0:
-            def_field = empty_field(curr_src).detach().clone().requires_grad_(True)
+            def_field = initialize_deformation_field(curr_src).detach().clone().requires_grad_(True)
         else:
-            def_field = scale_deform(prev_def_field, (H, W)).detach().clone().requires_grad_(True)
+            def_field = scale_deformation_field(prev_def_field, (H, W)).detach().clone().requires_grad_(True)
 
         # Optimizer: LBFGS on final level, Adam otherwise
         if lvl == pyramid_levels - 1:
@@ -348,8 +305,8 @@ def elastic_image_registration(
         for iter_idx in tqdm(range(iterations_per_level[lvl]), disable=not verbose, desc=f"Level {lvl}/{pyramid_levels-1}"):
             def closure():
                 optimizer.zero_grad()
-                warped = deform(curr_src, def_field, compute_device=device)
-                sim_loss = ncc(warped, curr_tgt, compute_device=device, **similarity_metric_params)
+                warped = apply_deformation_field(curr_src, def_field, compute_device=device)
+                sim_loss = compute_normalized_cross_correlation(warped, curr_tgt, compute_device=device, **similarity_metric_params)
                 reg_loss = deformation_loss(def_field, compute_device=device)
                 loss = sim_loss + weight * reg_loss
                 loss.backward()
@@ -365,8 +322,14 @@ def elastic_image_registration(
         prev_def_field = def_field
 
     # Upsample to original shape if needed
-    final_def = scale_deform(prev_def_field, (src_t.size(2), src_t.size(3))) if pyramid_levels != pyramid_levels else prev_def_field
-    final_warped = deform(src_t, final_def, compute_device=device)
+    final_def = scale_deformation_field(prev_def_field, (src_t.size(2), src_t.size(3))) if pyramid_levels != pyramid_levels else prev_def_field
+    final_warped = apply_deformation_field(src_t, final_def, compute_device=device)
+
+    # # Save outputs if needed
+    # if output_dir:
+    #     os.makedirs(output_dir, exist_ok=True)
+    #     cv2.imwrite(os.path.join(output_dir, "final_warped.png"), (final_warped.detach().cpu().numpy()[0, 0] * 255).astype(np.uint8))
+
     return final_def, final_warped
 
 

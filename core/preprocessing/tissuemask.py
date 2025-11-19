@@ -9,7 +9,7 @@ from scipy import ndimage
 import os 
 # import vision_agent
 # Set the API key for Vision Agent 
-os.environ["VISION_AGENT_API_KEY"] = ""
+os.environ["VISION_AGENT_API_KEY"] = "YjQ5MTR0bDIyZnNjYzF4a3JnaXBpOnlNeVpPT3lXbkUwNkVBTmJjMmpaZjNyV0h3WGdNT2U1"
 from vision_agent.tools import florence2_sam2_instance_segmentation
 from tiatoolbox.models.engine.semantic_segmentor import SemanticSegmentor
 from tiatoolbox.models.architecture.unet import UNetModel
