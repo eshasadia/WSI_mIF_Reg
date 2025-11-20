@@ -33,10 +33,10 @@ CORE is a fast and accurate coarse-to-fine image registration engine designed fo
 
 ## Features
 
-- **Prompt-based Tissue Mask Extraction** 
-- **Fast coarse level multi-stain image registration** 
-- **Fine-grained Nuclei-level precise alignment**
-- **Real time deformation estimation and Registration visualisation**
+- **Prompt-based Tissue Mask Extraction.** 
+- **Fast coarse level multi-stain image registration.** 
+- **Fine-grained Nuclei-level precise alignment on re-stained sections and tissue alignment on consecutive sections.**
+- **Real time deformation estimation and Registration visualisation.**
 
 ![CORE Architecture](https://github.com/user-attachments/assets/ffeca69d-e1b2-4260-bbd2-edf3fa28f76a)
 
