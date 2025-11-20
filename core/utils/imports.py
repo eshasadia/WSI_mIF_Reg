@@ -1,5 +1,5 @@
 """
-Import statements for WSI registration project
+Imports for CORE registration
 """
 
 # Core libraries
@@ -10,8 +10,6 @@ import os
 import sys
 import datetime
 import builtins
-
-# Scientific computing
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib import pyplot as plt
@@ -24,6 +22,7 @@ from skimage.registration import phase_cross_correlation
 from skimage import transform, color
 from PIL import Image
 import SimpleITK as sitk
+
 # Machine learning and point cloud processing
 import torch
 import open3d as o3d
@@ -44,12 +43,8 @@ from bokeh.palettes import Viridis256, Inferno256
 from bokeh.io import output_notebook
 
 # Custom modules (assuming they exist in src/)
-# sys.path.append('/home/u5552013/Desktop/20250414/src')
 import sys
 import os
-
-# Add the 'src' directory to sys.path
-# sys.path.append(os.path.abspath("/home/u5552013/Desktop/WSI_mIF_Registration/src"))
 import core.preprocessing.preprocessing
 import core.evaluation.evaluation
 import core.registration.rigid
@@ -57,4 +52,3 @@ import core.registration.nonrigid
 import core.utils.util
 import core.config
 import core.preprocessing.padding
-from tps import ThinPlateSpline
