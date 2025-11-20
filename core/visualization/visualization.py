@@ -1,5 +1,5 @@
 """
-Visualization functions for WSI registration results
+Visualization functions for CORE registration results
 """
 
 import pandas as pd
