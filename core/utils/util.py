@@ -674,15 +674,7 @@ def rigid_dot(image, matrix):
     u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
     u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
     return u_x, u_y
-# def rigid_dot(image, matrix):
-#     y_size, x_size,_ = np.shape(image)
-#     x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-#     points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones(np.shape(image)).ravel()))
-#     transformed_points = matrix @ points
-#     u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
-#     u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
-#     return u_x, u_y
-
+    
 def load_image(path):
     image = sitk.ReadImage(path)
     image = sitk.GetArrayFromImage(image)
@@ -692,12 +684,6 @@ def load_image(path):
         image = image
     image = color.rgb2gray(image)
     return image
-
-# def load_landmarks(path): for comet
-#     # Assuming the landmarks data starts from the second column
-#     landmarks = pd.read_csv(path).iloc[:, :2].values.astype(np.float64)  # Updated from np.float to np.float64
-#     return landmarks
-
 
 def load_landmarks(path):
     """
@@ -815,35 +801,6 @@ def load_landmarks(path):
     return landmarks
 
 
-def tre(landmarks_1, landmarks_2):
-    """
-    Calculate Target Registration Error between two sets of landmarks.
-    """
-    tre = np.sqrt(np.square(landmarks_1[:, 0] - landmarks_2[:, 0]) + np.square(landmarks_1[:, 1] - landmarks_2[:, 1]))
-    return tre
-
-def rtre(landmarks_1, landmarks_2, x_size, y_size):
-    """
-    Calculate relative Target Registration Error.
-    """
-    return tre(landmarks_1, landmarks_2) / np.sqrt(x_size*x_size + y_size*y_size)
-
-def print_rtre(source_landmarks, target_landmarks, x_size, y_size):
-    """
-    Print statistics for relative Target Registration Error.
-    """
-    calculated_tre = rtre(source_landmarks, target_landmarks, x_size, y_size)
-    mean = np.mean(calculated_tre) * 100
-    median = np.median(calculated_tre) * 100
-    mmax = np.max(calculated_tre) * 100
-    mmin = np.min(calculated_tre) * 100
-    print("TRE mean [%]: ", mean)
-    print("TRE median [%]: ", median)
-    print("TRE max [%]: ", mmax)
-    print("TRE min [%]: ", mmin)
-    return mean, median, mmax, mmin
-
-
 def transform_landmarks(landmarks, u_x, u_y):
     landmarks_x = landmarks[:, 0]
     landmarks_y = landmarks[:, 1]
@@ -959,38 +916,3 @@ def rotate_point(x, y, cx, cy, angle):
     y_prime = (x - cx) * math.sin(angle_radians) + (y - cy) * math.cos(angle_radians) + cy
     
     return x_prime, y_prime
-
-
-
-def matchpoints(points):
-    """
-    Match point between fixed and moving point sets.
-
-    Args:
-        points (np.array): point sets
-
-    Returns:
-        np.array: Rotation matrix and translation vector
-    """
-    if not points:
-        return None, None
-
-    points = np.array(points)
-
-    means = np.mean(points, axis=0)
-    deviations = points - means
-    # Match point set between closest points in ICP point sets.
-    s_x_xp = np.sum(deviations[:, 0, 0] * deviations[:, 1, 0])
-    s_y_yp = np.sum(deviations[:, 0, 1] * deviations[:, 1, 1])
-    s_x_yp = np.sum(deviations[:, 0, 0] * deviations[:, 1, 1])
-    s_y_xp = np.sum(deviations[:, 0, 1] * deviations[:, 1, 0])
-    # Calculate rotation matrix between matched points
-    rot_angle = np.arctan2(s_x_yp - s_y_xp, s_x_xp + s_y_yp)
-    # Calculate translation vector between matched points
-    translation = np.array([
-        means[1, 0] - (means[0, 0] * np.cos(rot_angle) - means[0, 1] * np.sin(rot_angle)),
-        means[1, 1] - (means[0, 0] * np.sin(rot_angle) + means[0, 1] * np.cos(rot_angle))
-    ])
-    # Return transformation.
-    return  np.array([[math.cos(rot_angle), -math.sin(rot_angle)],
-                        [math.sin(rot_angle), math.cos(rot_angle)]]), translation
