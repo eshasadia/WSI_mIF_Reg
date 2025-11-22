@@ -19,7 +19,7 @@
 
 ## News
 📢 November 2025 — CORE Released as Open-Source
-The first public release of CORE, a unified coarse-to-fine multi-stain image registration engine, is now available. This release includes mask-guided coarse alignment, nuclei-level refinement, and real-time deformation visualization.
+The first public release of CORE, a unified coarse-to-fine multi-stain image registration engine, is now available. This release includes prompt-guided mask generation, accelerated features based coarse alignment, nuclei-level refinement, and real-time deformation visualization.
 
 📝 November 2025 — Updated Preprint Available on arXiv. The team has released an updated version of the CORE preprint, expanding on the architecture, benchmarks, and qualitative results. Check out the newest version here: [arXiv:2403.05780](https://arxiv.org/html/2511.03826v2).
 
