@@ -66,7 +66,7 @@ export VISION_AGENT_API_KEY="your-api-key"
 2. For UNet based tissue mask extraction we have made the weights publicly available on hugging face. [CORE](https://huggingface.co/eshasadianasir/CORE/tree/main)
 
 ## Configuration
-Edit `config.py` to set your file paths and  resolutionn parameters:
+Edit `config.py` to set your file paths and  resolution parameters:
 ```python
 # Update these paths to match your data
 SOURCE_WSI_PATH = "/path/to/your/source_wsi.tiff"
