@@ -1,5 +1,5 @@
 """
-MHA Deformation Field Application for WSI Registration
+MHA Deformation Field Application for CORE
 
 Apply deformation fields computed at low resolution (e.g., 0.625x) 
 to whole slide images at high resolution (e.g., 40x).
