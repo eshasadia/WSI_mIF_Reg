@@ -63,8 +63,8 @@ def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, outpu
         Components of an existing deformation field (x and y displacement maps).
     util : module
         A module or object providing two functions:
-            - rigid_dot(source, transform): applies rigid transformation.
-            - compose_vector_fields(u_x, u_y, t_x, t_y): composes deformation fields.
+            - matrix_df(source, transform): applies rigid transformation.
+            - combine_deformation(u_x, u_y, t_x, t_y): composes deformation fields.
     output_path : str, optional
         Path to save the resulting deformation field as an .mha file.
 
@@ -83,10 +83,10 @@ def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, outpu
 
     # Apply inverse of scaled transform
     sh_transform = transform_3x3_scaled
-    t_x, t_y = rigid_dot(source_prep, np.linalg.inv(sh_transform))
+    t_x, t_y = matrix_df(source_prep, np.linalg.inv(sh_transform))
 
     # Compose the new vector field
-    f_x, f_y = compose_vector_fields(u_x, u_y, t_x, t_y)
+    f_x, f_y = combine_deformation(u_x, u_y, t_x, t_y)
 
     # Stack into deformation field
     deformation_field = np.stack((f_x, f_y), axis=-1)
@@ -445,7 +445,7 @@ def matrix_mha(image, matrix):
     u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
     return u_x, u_y
 
-def compose_vector_fields(u_x, u_y, v_x, v_y):
+def combine_deformation(u_x, u_y, v_x, v_y):
     y_size, x_size = np.shape(u_x)
     print("u_x shape: ", u_x.shape)
     grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
@@ -671,7 +671,7 @@ def warp_image(image, u_x, u_y):
     y_size, x_size = image.shape
     grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
     return nd.map_coordinates(image, [grid_y + u_y, grid_x + u_x], order=3, cval=0.0)
-def rigid_dot(image, matrix):
+def matrix_df(image, matrix):
     y_size, x_size,_ = np.shape(image)
     x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
     # You should use:
@@ -753,7 +753,7 @@ def deform_conversion(displacement_field_tc: torch.Tensor):
         displacement_field_np[2, :, :, :] = temp_df_copy[0, :, :, :] / 2.0 * (shape[3])
     return displacement_field_np
 
-def compose_vector_fields(u_x, u_y, v_x, v_y):
+def combine_deformation(u_x, u_y, v_x, v_y):
     y_size, x_size = np.shape(u_x)
     print("u_x shape: ", u_x.shape)
     grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
