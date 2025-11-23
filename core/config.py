@@ -6,22 +6,21 @@ Configuration file for CORE
 SOURCE_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1.svs'
 TARGET_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1_ome.tiff'
 
-
-MOVING_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/ki67_533.csv"
-FIXED_POINTS_PATH = "/home/u5552013/Nextcloud/HYRECO/Eval/he_533.csv"
-
-# Output CSV paths
+# Output Nuclei or Precomputed Nuclei CSV paths
 FIXED_NUCLEI_CSV = '/home/u5552013/Nextcloud/HYRECO/Data/nuclei_points/he_533_nuclei.csv'
 MOVING_NUCLEI_CSV = '/home/u5552013/Nextcloud/HYRECO/Data/nuclei_points/ki67_533_nuclei.csv'
 
 # Registration parameters
+#  initial resolution for coarse registration
 PREPROCESSING_RESOLUTION = 0.625
+#  High resolution for nuclei estimation and shape-aware registration
 REGISTRATION_RESOLUTION = 40
 PATCH_SIZE = (1000, 1000)
 PATCH_STRIDE = (1000, 1000)
 VISUALIZATION_SIZE = (5000, 5000)
 
 # Nuclei detection parameters
+#  needs to changed wrt to the datasets
 FIXED_THRESHOLD = 100
 MOVING_THRESHOLD = 50
 MIN_NUCLEI_AREA = 200
