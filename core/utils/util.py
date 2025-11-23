@@ -736,7 +736,7 @@ def calculate_resample_size(source, target, output_max_size):
 
 
 
-def tc_df_to_np_df(displacement_field_tc: torch.Tensor):
+def deform_conversion(displacement_field_tc: torch.Tensor):
     ndim = len(displacement_field_tc.size()) - 2
     if ndim == 2:
         displacement_field_np = displacement_field_tc.detach().clone().cpu()[0].permute(2, 0, 1).numpy()
