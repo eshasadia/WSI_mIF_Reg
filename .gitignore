@@ -46,9 +46,6 @@ coverage.xml
 wsi_mif_bkup/
 tmp/
 sandbox/
-sandbox/hyreco_res_all.py
-sandbox/hyreco.py
-
 output/
 data/
 datasets/
