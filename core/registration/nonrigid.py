@@ -260,7 +260,7 @@ def elastic_image_registration(
     source: np.ndarray, 
     target: np.ndarray, 
     similarity_metric: str = "ncc",
-    similarity_metric_params: Dict[str, Any] = {"size": 5},
+    similarity_metric_params: Dict[str, Any] = {"size": 7},
     compute_device: Union[str, t.device] = "cuda",
     verbose: bool = False,
     output_dir: Optional[Union[str, Path]] = None,

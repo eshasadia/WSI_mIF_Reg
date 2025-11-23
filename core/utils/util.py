@@ -28,6 +28,12 @@ import SimpleITK as sitk
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
 
+
+def tensor_to_rgb_numpy(tensor):
+    # (1, 1, H, W) -> (3, H, W) -> (H, W, 3)
+    tensor_rgb = tensor.squeeze().repeat(3, 1, 1)
+    return tensor_rgb.permute(1, 2, 0).detach().cpu().numpy()
+    
 def skip_subsample(points, n_samples=1000):
     total_points = points.shape[0]
     if total_points <= n_samples:
