@@ -1,3 +1,5 @@
+#  Accelerated feature model from XFeat
+
 dependencies = ['torch']
 from modules.xfeat import XFeat as _XFeat
 import torch
