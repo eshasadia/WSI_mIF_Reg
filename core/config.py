@@ -5,12 +5,12 @@ import os
 # Set the API key for Vision Agent 
 os.environ["VISION_AGENT_API_KEY"] = ""
 # File paths
-SOURCE_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1.svs'
-TARGET_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1_ome.tiff'
+SOURCE_WSI_PATH=''
+TARGET_WSI_PATH=''
 
 # Output Nuclei or Precomputed Nuclei CSV paths
-FIXED_NUCLEI_CSV = '/home/u5552013/Nextcloud/HYRECO/Data/nuclei_points/he_533_nuclei.csv'
-MOVING_NUCLEI_CSV = '/home/u5552013/Nextcloud/HYRECO/Data/nuclei_points/ki67_533_nuclei.csv'
+FIXED_NUCLEI_CSV = ''
+MOVING_NUCLEI_CSV = ''
 
 # Registration parameters
 #  initial resolution for coarse registration
