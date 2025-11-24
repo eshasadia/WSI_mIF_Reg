@@ -24,7 +24,8 @@ import numpy as np
 import math
 import numpy as np
 import SimpleITK as sitk
-
+from scipy.ndimage import map_coordinates
+from scipy.interpolate import griddata
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
 
@@ -97,6 +98,99 @@ def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, outpu
 
     return sitk_image
 
+
+
+
+def create_nonrigid_mha(
+    moving_subsample,
+    nonrigid_transformed_coords,
+    r_x,
+    w_x, w_y,
+    target_prep,
+    create_displacement_field,
+    RegistrationParams,
+    output_path=""
+):
+    """
+    Builds a non-rigid displacement + deformation field 
+    and saves it as an .mha file (using fr_x, fr_y as final field).
+    """
+
+    print("Creating displacement field...")
+
+    # Scale for numerical stability
+    scale_factor = 64
+    source_points_scaled = moving_subsample / scale_factor
+    target_points_scaled = nonrigid_transformed_coords / scale_factor
+
+    # Determine grid size
+    H, W = r_x.shape
+    grid_y, grid_x = np.mgrid[0:H, 0:W]
+
+    # Dense displacement field
+    displacement_field = create_displacement_field(
+        source_points_scaled,
+        target_points_scaled,
+        target_prep.shape,
+        method=RegistrationParams.INTERPOLATION_METHOD,
+        sigma=RegistrationParams.DISPLACEMENT_SIGMA,
+        max_displacement=RegistrationParams.MAX_DISPLACEMENT
+    )
+
+    # Combine deformation + displacement
+    fr_x, fr_y = util.combine_deformation(
+        w_x, w_y,
+        displacement_field[..., 0],
+        displacement_field[..., 1]
+    )
+
+    # FINAL deformation field to save (now fr_x, fr_y)
+    deformation_field = np.stack((fr_x, fr_y), axis=-1)
+
+    # Convert → SimpleITK image
+    sitk_image = sitk.GetImageFromArray(deformation_field)
+
+    # Save to disk
+    sitk.WriteImage(sitk_image, output_path)
+
+    return sitk_image, deformation_field, displacement_field, (fr_x, fr_y)
+
+
+def create_deform(source_prep, final_transform, displacement_field, output_path=""):
+    """
+    Computes the full deformation field and writes it to an MHA file.
+
+    Parameters
+    ----------
+    source_prep : array-like
+        Input source data for matrix_df.
+    final_transform : array-like
+        Final transform data for matrix_df.
+    displacement_field : array-like
+        Raw displacement field (expected shape: [2, H, W] or similar).
+    output_path : str
+        Output MHA file path.
+    """
+    
+    # Get rigid or base transform components
+    r_x, r_y = matrix_df(source_prep, final_transform)
+
+    # Convert displacement field into 2-component arrays
+    disp_field = deform_conversion(displacement_field)
+
+    # Combine base transform + deformation
+    w_x, w_y = combine_deformation(r_x, r_y, disp_field[0], disp_field[1])
+
+    # Stack into deformation field (H, W, 2)
+    deformation_field = np.stack((w_x, w_y), axis=-1)
+
+    # Convert to SimpleITK image
+    sitk_image = sitk.GetImageFromArray(deformation_field)
+
+    # Write to file
+    sitk.WriteImage(sitk_image, output_path)
+
+    return sitk_image
 
 def apply_deformation_to_points(points, deformation_field):
     """
