@@ -1,7 +1,9 @@
 """
 Configuration file for CORE
 """
-
+import os
+# Set the API key for Vision Agent 
+os.environ["VISION_AGENT_API_KEY"] = ""
 # File paths
 SOURCE_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1.svs'
 TARGET_WSI_PATH='/home/u5552013/Nextcloud/REACTIVAS_vis/1/slides/1_ome.tiff'
