@@ -8,7 +8,7 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
-  - cudatoolkit=11.8   # Only if you want GPU support, adjust based on your CUDA version
+  - cudatoolkit=11.8   
   - opencv
   - scikit-image
   - scipy
@@ -17,5 +17,5 @@ dependencies:
   - tiatoolbox
   - pip
   - pip:
-      - vision-agent
+  - vision-agent
      
