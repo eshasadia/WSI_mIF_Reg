@@ -60,8 +60,7 @@ def preprocess_images(source, target):
     Returns:
         tuple: (source_prep, target_prep)
     """
-    # For now, just return the original images
-    # You can add padding or other preprocessing here
+ 
     source_prep, target_prep = source, target
     
     print(f"Source preprocessed shape: {source_prep.shape}")
@@ -123,33 +122,7 @@ def scale_transformation_matrix(transform_matrix, input_res, output_res):
     return transform_scaled
 
 
-def process_nuclei_patch(img, threshold, gamma=None, min_area=200):
-    """
-    Process a single patch to detect nuclei
-    
-    Args:
-        img: Input image patch
-        threshold: Binary threshold value
-        gamma: Gamma correction value (optional)
-        min_area: Minimum area for nuclei detection
-        
-    Returns:
-        tuple: (binary_image, stats, centroids)
-    """
-    # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Apply gamma correction if specified
-    if gamma is not None:
-        gray = adjust_gamma(gray, gamma)
-    
-    # Apply binary threshold
-    _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
-    
-    # Find connected components
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary)
-    
-    return binary, stats, centroids
+
 def load_slide(image_path_1: str, resolution: float = 0.625):
     fixed_wsi = WSIReader.open(image_path_1)
     fixed_thumbnail = fixed_wsi.slide_thumbnail(resolution=resolution, units="power")
@@ -342,3 +315,30 @@ def gamma_corrections(img, gamma):
         invGamma = 1.0 / gamma
         table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
         return cv2.LUT(img, table)
+def process_nuclei_patch(img, threshold, gamma=None, min_area=200):
+    """
+    Process a single patch to detect nuclei
+    
+    Args:
+        img: Input image patch
+        threshold: Binary threshold value
+        gamma: Gamma correction value (optional)
+        min_area: Minimum area for nuclei detection
+        
+    Returns:
+        tuple: (binary_image, stats, centroids)
+    """
+    # Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Apply gamma correction if specified
+    if gamma is not None:
+        gray = adjust_gamma(gray, gamma)
+    
+    # Apply binary threshold
+    _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
+    
+    # Find connected components
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary)
+    
+    return binary, stats, centroids
