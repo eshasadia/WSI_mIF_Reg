@@ -70,10 +70,14 @@ class FlorenceTissueMaskExtractor:
         except Exception:
             return []
 
-    def _unet_mask(self, image:np.ndarray) -> np.ndarray:
-          extractor = UNetTissueMaskExtractor(model_path="",device="cuda" )
-          mask = extractor.extract_masks(image)
-          return mask
+   def _unet_mask(self, image: np.ndarray) -> np.ndarray:
+        extractor = UNetTissueMaskExtractor(model_path="", device="cuda")
+        mask = extractor.extract_masks(image)
+        
+        if mask is not None:
+            return mask
+        else:
+            return self._fallback_mask(image)
     def _fallback_mask(self, image: np.ndarray) -> np.ndarray:
         print("applying fall back")
         """Fallback method using Otsu threshold and morphology."""
