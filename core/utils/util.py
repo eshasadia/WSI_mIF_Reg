@@ -21,26 +21,25 @@ from scipy.interpolate import griddata
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
 
-
-def tensor_to_rgb_numpy(tensor):
-    # (1, 1, H, W) -> (3, H, W) -> (H, W, 3)
-    tensor_rgb = tensor.squeeze().repeat(3, 1, 1)
-    return tensor_rgb.permute(1, 2, 0).detach().cpu().numpy()
-    
+#  UTILS
 def skip_subsample(points, n_samples=1000):
     total_points = points.shape[0]
     if total_points <= n_samples:
         return points
     step = total_points // n_samples
-    return points[::step][:n_samples] 
+    return points[::step][:n_samples]
 
 def gamma_corrections(img, gamma):
         invGamma = 1.0 / gamma
         table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
         return cv2.LUT(img, table)
+         
+def tensor_to_rgb_numpy(tensor):
+    # (1, 1, H, W) -> (3, H, W) -> (H, W, 3)
+    tensor_rgb = tensor.squeeze().repeat(3, 1, 1)
+    return tensor_rgb.permute(1, 2, 0).detach().cpu().numpy()
     
-
-
+# DEFORMATION
 def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, output_path='./533_finerigid.mha'):
     """
     Creates a deformation field by scaling a 3x3 transformation matrix and 
@@ -89,10 +88,6 @@ def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, outpu
     sitk.WriteImage(sitk_image, output_path)
 
     return sitk_image
-
-
-
-
 def create_nonrigid_mha(
     moving_subsample,
     nonrigid_transformed_coords,
@@ -147,7 +142,6 @@ def create_nonrigid_mha(
 
     return sitk_image, deformation_field, displacement_field, (fr_x, fr_y)
 
-
 def create_deform(source_prep, final_transform, displacement_field, output_path=""):
     """
     Computes the full deformation field and writes it to an MHA file.
@@ -183,7 +177,6 @@ def create_deform(source_prep, final_transform, displacement_field, output_path=
     sitk.WriteImage(sitk_image, output_path)
 
     return sitk_image
-
 def apply_deformation_to_points(points, deformation_field):
     """
     Apply a deformation field to a set of 2D points.
@@ -221,8 +214,6 @@ def apply_deformation_to_points(points, deformation_field):
     warped_points[:, 1] = points[:, 1] + disp_at_points_y
 
     return warped_points
-
-
 def create_displacement_field_for_wsi(transform_matrix, source_thumbnail, target_thumbnail):    
     # Use the larger dimensions to avoid cropping issues
     max_height = max(source_thumbnail.shape[0], target_thumbnail.shape[0])
@@ -250,118 +241,9 @@ def create_displacement_field_for_wsi(transform_matrix, source_thumbnail, target
     # Stack into displacement field (H, W, 2)
     displacement_field = np.stack((u_x, u_y), axis=-1)
     return displacement_field
+# POINT
 
-def pad_image1_to_image2(image_1: np.ndarray, image_2: np.ndarray, pad_value: float = 1.0):
-    """
-    Pad image_1 to match the size of image_2.
-    
-    Args:
-        image_1: Image array to be padded.
-        image_2: Reference image array (target size).
-        pad_value: Value to use for padding.
-        
-    Returns:
-        tuple: (padded_image_1, image_2, padding_params)
-    """
-    # Determine the dimensionality and shape
-    if image_1.ndim == 4:  # (batch, channel, height, width)
-        y_size_1, x_size_1 = image_1.shape[2], image_1.shape[3]
-        y_size_2, x_size_2 = image_2.shape[2], image_2.shape[3]
-        pad_shape = ((0, 0), (0, 0), (0, 0), (0, 0))
-    elif image_1.ndim == 3:  # (height, width, channel)
-        y_size_1, x_size_1 = image_1.shape[0], image_1.shape[1]
-        y_size_2, x_size_2 = image_2.shape[0], image_2.shape[1]
-        pad_shape = ((0, 0), (0, 0), (0, 0))
-    else:  # (height, width)
-        y_size_1, x_size_1 = image_1.shape
-        y_size_2, x_size_2 = image_2.shape
-        pad_shape = ((0, 0), (0, 0))
 
-    pad_y = max(0, y_size_2 - y_size_1)
-    pad_x = max(0, x_size_2 - x_size_1)
-
-    pad_1 = [
-        (math.floor(pad_y / 2), math.ceil(pad_y / 2)),
-        (math.floor(pad_x / 2), math.ceil(pad_x / 2))
-    ]
-
-    # Construct full pad shape for np.pad based on image shape
-    if image_1.ndim == 4:
-        pad_shape = ((0, 0), (0, 0), pad_1[0], pad_1[1])
-    elif image_1.ndim == 3:
-        pad_shape = (pad_1[0], pad_1[1], (0, 0))
-    else:
-        pad_shape = (pad_1[0], pad_1[1])
-
-    padded_image_1 = np.pad(image_1, pad_shape, mode='constant', constant_values=pad_value)
-
-    # Apply gamma correction if needed (assuming these functions exist)
-    padded_image_1 = gamma_corrections(padded_image_1, 0.4)
-    image_2 = gamma_corrections(image_2, 1)
-
-    print("gamma corrected")
-    return padded_image_1, image_2, {'pad_1': pad_1}
-
-def resize_and_compute_translation(fixed_image, moving_image):
-    """
-    Resizes fixed and moving images to the maximum dimensions using black padding
-    and computes initial translation offsets for 2D or 3D images (where the 3rd dimension is the channel).
-    Args:
-        fixed_image (np.ndarray): The fixed image (2D or 3D).
-        moving_image (np.ndarray): The moving image (2D or 3D).
-    Returns:
-        fixed_padded (np.ndarray): The fixed image with padding.
-        moving_padded (np.ndarray): The moving image with padding.
-        translation (tuple): The translation offsets (tx, ty) for 2D or (tx, ty, channels) for 3D.
-    """
-    # Ensure input images are in uint8 format (scaling to 0-255 range if necessary)
-    if fixed_image.dtype != np.uint8:
-        fixed_image = (fixed_image * 255).astype(np.uint8)
-    if moving_image.dtype != np.uint8:
-        moving_image = (moving_image * 255).astype(np.uint8)
-    
-    # Check for 2D or 3D images (where 3D is understood as height, width, channels)
-    if fixed_image.ndim == 2:  # 2D images
-        fixed_h, fixed_w = fixed_image.shape
-        moving_h, moving_w = moving_image.shape
-        
-        # Compute padding and translation offsets
-        max_h, max_w = max(fixed_h, moving_h), max(fixed_w, moving_w)
-        if moving_h > fixed_h:
-            tx, ty = (max_w - moving_w) // 2, (max_h - moving_h) // 2
-        fx, fy = max_w - fixed_w, max_h - fixed_h
-        mx, my = max_w - moving_w, max_h - moving_h
-        
-        # Padding images to match max dimensions
-        fixed_padded = np.zeros((max_h, max_w), dtype=np.uint8)
-        moving_padded = np.zeros((max_h, max_w), dtype=np.uint8)
-        fixed_padded[:fixed_h, :fixed_w] = fixed_image
-        # moving_padded[ty:ty + moving_h, tx:tx + moving_w] = moving_image
-        moving_padded[:moving_h, :moving_w] = moving_image
-        
-        return fixed_padded, moving_padded, (fx, fy), (mx, my)
-    
-    elif fixed_image.ndim == 3:  # 3D images (height, width, channels)
-        fixed_h, fixed_w, fixed_c = fixed_image.shape
-        moving_h, moving_w, moving_c = moving_image.shape
-        
-        # Compute padding and translation offsets for height, width (not channels)
-        max_h, max_w = max(fixed_h, moving_h), max(fixed_w, moving_w)
-        tx, ty = (max_w - moving_w) // 2, (max_h - moving_h) // 2
-        fx, fy = max_w - fixed_w, max_h - fixed_h
-        mx, my = max_w - moving_w, max_h - moving_h
-        
-        # Padding images to match max height and width (but retain the channel dimension)
-        fixed_padded = np.zeros((max_h, max_w, fixed_c), dtype=np.uint8)
-        moving_padded = np.zeros((max_h, max_w, moving_c), dtype=np.uint8)
-        moving_padded[:moving_h, :moving_w] = moving_image
-        fixed_padded[:fixed_h, :fixed_w, :] = fixed_image
-        # moving_padded[ty:ty + moving_h, tx:tx + moving_w, :] = moving_image
-        
-        return fixed_padded, moving_padded, (fx, fy), (mx, my)
-    
-    else:
-        raise ValueError("Input images must be either 2D or 3D with channel as the 3rd dimension.") 
 def _check_dims(
     fixed_img: np.ndarray,
     moving_img: np.ndarray,
@@ -954,31 +836,6 @@ def dice(fixed, moving):
     dice_coefficient = 2.0 * intersection / union
     return dice_coefficient
 
-def mse(fixed, moving):
-    """
-    Calculate MSE value.
-
-    Args:
-        fixed (np.array): Fixed point set
-        moving (np.array): Moving point set
-
-    Returns:
-        float: Mean Square error.
-    """
-    if len(fixed) == 0 or len(moving) == 0:
-        print("Warning: One or both point sets are empty. Returning inf for MSE.")
-        return float('inf') 
-    else:
-        # Match fixed and moving point set.
-        moving = sort_coordinates(fixed, moving)
-        s = 0
-        # Calculate euclidean distances between matched points.
-        for f, m in zip(fixed, moving):
-            s += (f[0]-m[0][0][0])**2 + (f[1]-m[0][0][1])**2
-        # Calculates MSE value and return value
-        mse_value = s/len(fixed)
-
-    return mse_value
 
 def compute_center_of_mass(array):
     # Calculates the center of mass of point set.
