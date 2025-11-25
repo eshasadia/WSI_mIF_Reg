@@ -1,31 +1,23 @@
-
-import numpy as np
 import os
 import cv2
+import math
+import pandas as pd
+import matplotlib.pyplot as plt
+import SimpleITK as sitk
+import csv
+import torch
+import math
 import numpy as np
-from skimage import exposure, filters, img_as_float, color
-from skimage import measure, morphology
+from skimage import exposure, filters, img_as_float, color, measure, morphology
 from skimage.registration import phase_cross_correlation
 from sklearn.neighbors import NearestNeighbors
 from sklearn.cluster import KMeans
-from scipy import ndimage
 from scipy import ndimage as nd
 from scipy.ndimage import map_coordinates
 from tiatoolbox.utils.metrics import dice
 from tiatoolbox import logger, rcParam
-import math
-import pandas as pd
-import matplotlib.pyplot as plt
-from scipy import ndimage as nd
-import SimpleITK as sitk
-import csv
-import torch
-import numpy as np
-import math
-import numpy as np
-import SimpleITK as sitk
-from scipy.ndimage import map_coordinates
 from scipy.interpolate import griddata
+
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
 
