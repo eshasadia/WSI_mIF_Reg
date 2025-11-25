@@ -10,7 +10,6 @@ import os
 import sys
 import datetime
 import builtins
-import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib import pyplot as plt
 import scipy.ndimage
