@@ -9,7 +9,7 @@ import core.preprocessing.preprocessing as prep  # Original preprocessing module
 """
 Preprocessing functions for WSI registration
 """
-def load_wsi_images(source_path, target_path, resolution=0.625, data=''):
+def load_wsi_images(source_path, target_path, resolution=0.625, data='', obj_power=''):
     """
     Load source and target WSI images
     
@@ -28,9 +28,9 @@ def load_wsi_images(source_path, target_path, resolution=0.625, data=''):
 
         # Manually set the objective power if it's None
         if target_wsi.info.objective_power is None:
-            target_wsi.info.objective_power = 10.0  # Set to a standard value like 20x or 40x
+            target_wsi.info.objective_power = obj_power # Set to a standard value like 20x or 40x
         if source_wsi.info.objective_power is None:
-            source_wsi.info.objective_power = 10.0
+            source_wsi.info.objective_power = obj_power
         
         target = target_wsi.slide_thumbnail(resolution=resolution, units="power")
         source = source_wsi.slide_thumbnail(resolution=resolution, units="power")
