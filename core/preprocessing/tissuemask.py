@@ -60,7 +60,7 @@ class FlorenceTissueMaskExtractor:
                 return combined_mask
       
 
-        # Fallback to grayscale + Otsu's method
+        # Fallback to unet method
         return self._fallback_mask(image)
 
     @staticmethod
@@ -70,6 +70,10 @@ class FlorenceTissueMaskExtractor:
         except Exception:
             return []
 
+    def _unet_mask(self, image:np.ndarray) -> np.ndarray:
+          extractor = UNetTissueMaskExtractor(model_path="",device="cuda" )
+          mask = extractor.extract_masks(image)
+          return mask
     def _fallback_mask(self, image: np.ndarray) -> np.ndarray:
         print("applying fall back")
         """Fallback method using Otsu threshold and morphology."""
@@ -200,7 +204,7 @@ class UNetTissueMaskExtractor:
         model.load_state_dict(pretrained)
         return model
 
-    def extract_masks(self, fixed_image: np.ndarray, moving_image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def extract_masks(self, image: np.ndarray ) -> tuple[np.ndarray]:
         """
         Generate tissue masks for fixed and moving images using UNet segmentation.
 
@@ -222,14 +226,10 @@ class UNetTissueMaskExtractor:
         os.makedirs(save_dir)
 
         # Prepare RGB input from grayscale
-        fixed_rgb = np.repeat(np.expand_dims(fixed_image, axis=2), 3, axis=2)
-        moving_rgb = np.repeat(np.expand_dims(moving_image, axis=2), 3, axis=2)
-
+        image_rgb = np.repeat(np.expand_dims(image, axis=2), 3, axis=2)
         # Save images
-        fixed_path = os.path.join(global_save_dir, 'fixed.png')
-        moving_path = os.path.join(global_save_dir, 'moving.png')
-        cv2.imwrite(fixed_path, fixed_rgb)
-        cv2.imwrite(moving_path, moving_rgb)
+        image_path = os.path.join(global_save_dir, 'image.png')
+        cv2.imwrite(image_path, image_rgb)
 
         # Create segmentor and predict
         segmentor = SemanticSegmentor(
@@ -240,7 +240,7 @@ class UNetTissueMaskExtractor:
         )
 
         output = segmentor.predict(
-            [fixed_path, moving_path],
+            [image_path],
             save_dir=save_dir,
             mode="tile",
             resolution=1.0,
@@ -253,16 +253,11 @@ class UNetTissueMaskExtractor:
         )
 
         # Load and process masks
-        fixed_mask = np.load(output[0][1] + ".raw.0.npy")
-        moving_mask = np.load(output[1][1] + ".raw.0.npy")
+        mask = np.load(output[0][1] + ".raw.0.npy")
+        mask = np.argmax(mask, axis=-1) == 2
+        mask = self.post_processing_mask(mask)
 
-        fixed_mask = np.argmax(fixed_mask, axis=-1) == 2
-        moving_mask = np.argmax(moving_mask, axis=-1) == 2
-
-        fixed_mask = self.post_processing_mask(fixed_mask)
-        moving_mask = self.post_processing_mask(moving_mask)
-
-        return fixed_mask, moving_mask
+        return mask
 """
 Example
 extractor = UNetTissueMaskExtractor(
