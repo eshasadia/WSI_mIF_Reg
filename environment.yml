@@ -4,18 +4,22 @@ channels:
   - conda-forge
 dependencies:
   - python=3.10
-  - numpy
-  - pytorch
-  - torchvision
-  - torchaudio
-  - cudatoolkit=11.8   
-  - opencv
-  - scikit-image
-  - scipy
-  - pillow
-  - pillow-heif
-  - tiatoolbox
+  - numpy=1.26
+  - scipy=1.13
+  - scikit-image=0.24
+  - opencv=4.10
+  - pillow=10.4
+  - pillow-heif=0.16
+  - tiatoolbox=1.6
+  - pytorch=2.5
+  - torchvision=0.20
+  - torchaudio=2.5
+  - cudatoolkit=12.4
   - pip
   - pip:
-  - vision-agent
-     
+      - vision-agent==1.1.1
+      - openai==1.70.0
+      - faiss-gpu==1.9.0
+      - timm==1.0.11
+      - simpleitk==2.4.0
+
